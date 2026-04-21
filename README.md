@@ -7,7 +7,7 @@
   </a>
 </div>
 
-# NovPlayer — Build Instructions
+# media_player — Build Instructions
 
 ## What You Need
 
@@ -252,10 +252,6 @@ this is harmless.
 
 ---
 
-<div align="center">
-  <img src="/images/demo/KIDA002.jpg" alt="KIDA Robot" width="600"/>
-</div>
-<br>
 <div align="center">© Cursed Entertainment 2026</div>
 <br>
 <div align="center">
