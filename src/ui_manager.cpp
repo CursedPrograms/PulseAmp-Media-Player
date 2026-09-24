@@ -9,8 +9,12 @@
 #include <sstream>
 #include <iomanip>
 #include <iostream>
+#include <cstdio>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX // keep std::min/std::max usable (MSVC)
+#endif
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
@@ -54,7 +58,12 @@ bool UIManager::handleEvent(const SDL_Event& e) {
             case SDLK_DOWN:  volume_ = std::max(0.f, volume_ - 0.05f);
                              player_.setVolume(volume_); break;
             case SDLK_m:     player_.setMuted(!player_.isMuted()); break;
-            case SDLK_f:     fullscreen_ = !fullscreen_; break;
+            case SDLK_f: {
+                fullscreen_ = !fullscreen_;
+                if (SDL_Window* win = SDL_GetWindowFromID(e.key.windowID))
+                    SDL_SetWindowFullscreen(win, fullscreen_ ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                break;
+            }
             case SDLK_n:     { auto* ne = playlist_.next();
                                if (ne) playEntry(playlist_.getIndex()); break; }
             case SDLK_p:     { auto* pr = playlist_.prev();
@@ -80,16 +89,35 @@ bool UIManager::handleEvent(const SDL_Event& e) {
 
 // ─── Main render ──────────────────────────────────────────────────────────────
 void UIManager::render(int win_w, int win_h, double time) {
-    // Handle end-of-file: advance playlist
-    static bool was_playing = false;
-    bool is_playing = (player_.getState() == PlayerState::Playing);
-    (void)was_playing; (void)is_playing;
+    // Keep the audio output in sync with the player (applied instantly in the callback)
+    audio_.pause(player_.getState() != PlayerState::Playing);
+    audio_.setGain(player_.isMuted() ? 0.f : player_.getVolume());
+    audio_.setSpatialWidth(spatial_width_);
+
+    // Handle end-of-file on the main thread: advance the playlist
+    if (player_.pollEnded()) {
+        // Finished: forget the resume point so it starts from the top next time
+        playlist_.savePosition(player_.getFilePath(), 0.0);
+        const PlaylistEntry* ne = auto_advance_ ? playlist_.next() : nullptr;
+        if (ne) playEntry(playlist_.getIndex());
+        else    player_.pause();
+    }
+
+    // Pick up a finished waveform from the generator thread
+    {
+        std::lock_guard lk(waveform_mu_);
+        if (waveform_pending_ready_) {
+            waveform_peaks_ = std::move(waveform_pending_);
+            waveform_pending_ready_ = false;
+            waveform_ready_ = true;
+        }
+    }
 
     // Update BPM
     if (player_.getState() == PlayerState::Playing) {
         constexpr int BPM_FEED = 1024;
         static std::vector<float> bpm_mono(BPM_FEED);
-        player_.getAudioBuffer().peekLatest(bpm_mono.data(), BPM_FEED);
+        player_.getAudioBuffer().peekNext(bpm_mono.data(), BPM_FEED);
         // Mix to mono
         for (int i = 0; i < BPM_FEED/2; ++i)
             bpm_mono[i] = (bpm_mono[i*2] + bpm_mono[i*2+1]) * 0.5f;
@@ -145,7 +173,7 @@ void UIManager::render(int win_w, int win_h, double time) {
 
     // Sidebar
     if (show_sidebar_)
-        drawSidebar(CONTENT_W, MENUBAR_H, SIDEBAR_W, CONTENT_H);
+        drawSidebar(CONTENT_W, MENUBAR_H, SIDEBAR_W, CONTENT_H, time);
 
     // Info overlay
     if (info_overlay_ && overlay_alpha_ > 0.01f)
@@ -403,8 +431,9 @@ void UIManager::drawTransportBar(float x, float y, float w, float h) {
     // Volume
     ImGui::SameLine();
     ImGui::SetNextItemWidth(80.f);
-    if (ImGui::SliderFloat("##vol", &volume_, 0.f, 1.f, "Vol %.0f%%", ImGuiSliderFlags_None)) {
-        volume_ = std::clamp(volume_, 0.f, 1.f);
+    float vol_pct = volume_ * 100.f;
+    if (ImGui::SliderFloat("##vol", &vol_pct, 0.f, 100.f, "Vol %.0f%%", ImGuiSliderFlags_None)) {
+        volume_ = std::clamp(vol_pct / 100.f, 0.f, 1.f);
         player_.setVolume(volume_);
     }
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) volume_ = 1.f, player_.setVolume(1.f);
@@ -501,6 +530,9 @@ void UIManager::drawPlaylistTab() {
 
 // ─── Converter tab ────────────────────────────────────────────────────────────
 void UIManager::drawConverterTab() {
+    ConvertProgress prog;
+    { std::lock_guard lk(conv_mu_); prog = conv_prog_; }
+
     auto fmts = Converter::availableFormats();
 
     ImGui::TextDisabled("Source:");
@@ -544,22 +576,23 @@ void UIManager::drawConverterTab() {
 
     bool running = conv_.isRunning();
     if (running) {
-        ImGui::ProgressBar((float)conv_prog_.progress, {-1,18.f});
+        ImGui::ProgressBar((float)prog.progress, {-1,18.f});
         ImGui::TextDisabled("%.0f%%  %s / %s",
-            conv_prog_.progress*100,
-            formatTime(conv_prog_.current_time).c_str(),
-            formatTime(conv_prog_.duration).c_str());
+            prog.progress*100,
+            formatTime(prog.current_time).c_str(),
+            formatTime(prog.duration).c_str());
         if (ImGui::Button("Cancel", {-1,22.f})) conv_.cancel();
     } else {
-        if (conv_prog_.done && !conv_prog_.error)
+        if (prog.done && !prog.error)
             ImGui::TextColored({0.2f,1.f,0.4f,1.f}, "Done!");
-        if (conv_prog_.error)
-            ImGui::TextColored({1.f,0.3f,0.3f,1.f}, "Error: %s", conv_prog_.error_msg.c_str());
+        if (prog.error)
+            ImGui::TextColored({1.f,0.3f,0.3f,1.f}, "Error: %s", prog.error_msg.c_str());
 
         if (ImGui::Button("Convert", {-1,22.f})) {
             std::string s = conv_source_path_.empty() && pe ? pe->path : conv_source_path_;
             std::string o = conv_output_buf_[0] ? conv_output_buf_ :
-                (fs::path(s).stem().string() + "_conv." + fmts[conv_fmt_idx_]);
+                (fs::path(s).parent_path() /
+                 (fs::path(s).stem().string() + "_conv." + fmts[conv_fmt_idx_])).string();
             ConvertJob j;
             j.input_path   = s;
             j.output_path  = o;
@@ -568,8 +601,11 @@ void UIManager::drawConverterTab() {
             j.video_bitrate= conv_vid_kbps_   * 1000;
             j.strip_video  = conv_strip_vid_;
             j.strip_audio  = conv_strip_aud_;
-            conv_prog_ = {};
-            conv_.start(j, [this](ConvertProgress p){ conv_prog_ = p; });
+            { std::lock_guard lk(conv_mu_); conv_prog_ = {}; }
+            conv_.start(j, [this](ConvertProgress p){
+                std::lock_guard lk(conv_mu_);  // called from the converter thread
+                conv_prog_ = std::move(p);
+            });
         }
     }
 }
@@ -713,20 +749,13 @@ void UIManager::playEntry(int idx) {
     if (waveform_path_ != pe->path) {
         waveform_path_ = pe->path;
         waveform_peaks_.clear();
+        { std::lock_guard lk(waveform_mu_); waveform_pending_ready_ = false; }
         waveform_.generate(pe->path, 512, [this](std::vector<float> peaks){
-            waveform_peaks_ = std::move(peaks);
-            waveform_ready_ = true;
+            std::lock_guard lk(waveform_mu_);
+            waveform_pending_ = std::move(peaks);
+            waveform_pending_ready_ = true;
         });
     }
-
-    // Set end-of-file callback
-    player_.setEndCallback([this]() {
-        if (!auto_advance_) return;
-        // Save position
-        playlist_.savePosition(player_.getFilePath(), player_.getDuration());
-        auto* ne = playlist_.next();
-        if (ne) playEntry(playlist_.getIndex());
-    });
 
     // Reset overlay
     overlay_timer_ = 0; overlay_alpha_ = 1.f;

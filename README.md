@@ -7,7 +7,11 @@
   </a>
 </div>
 
-# media_player — Build Instructions
+# NovPlayer (media_player)
+
+A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video and audio playback, five audio visualizers, real-time BPM detection, a waveform seek bar, smart resume, a stereo widener and a built-in format converter.
+
+## Build Instructions
 
 ## What You Need
 
@@ -15,7 +19,7 @@
 |---|---|---|
 | CMake | ≥ 3.20 | [cmake.org](https://cmake.org) |
 | C++ compiler | C++17 | GCC 10+, Clang 12+, MSVC 2022 |
-| FFmpeg dev libs | 6.x / 7.x | avformat, avcodec, avutil, swscale, swresample, avfilter |
+| FFmpeg dev libs | 6.x – 8.x | avformat, avcodec, avutil, swscale, swresample |
 | SDL2 dev libs | ≥ 2.26 | [libsdl.org](https://libsdl.org) |
 | OpenGL | 3.3+ | Provided by your GPU driver |
 | ImGui | v1.90 | **Auto-downloaded** by CMake FetchContent |
@@ -30,15 +34,15 @@ sudo apt update
 sudo apt install -y \
     build-essential cmake git \
     libavformat-dev libavcodec-dev libavutil-dev \
-    libswscale-dev libswresample-dev libavfilter-dev \
+    libswscale-dev libswresample-dev \
     libsdl2-dev libgl1-mesa-dev libglu1-mesa-dev \
     zenity           # optional: file-open dialog
 ```
 
 ### 2. Clone & build
 ```bash
-git clone https://github.com/yourname/novplayer.git
-cd novplayer
+git clone https://github.com/CursedPrograms/media_player.git
+cd media_player
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
@@ -61,14 +65,14 @@ C:\vcpkg\vcpkg integrate install
 
 ### 2. Install dependencies via vcpkg
 ```powershell
-C:\vcpkg\vcpkg install ffmpeg[avcodec,avformat,avutil,swscale,swresample,avfilter]:x64-windows
+C:\vcpkg\vcpkg install ffmpeg[avcodec,avformat,avutil,swscale,swresample]:x64-windows
 C:\vcpkg\vcpkg install sdl2:x64-windows
 ```
 
 ### 3. Configure & build
 ```powershell
-git clone https://github.com/yourname/novplayer.git
-cd novplayer
+git clone https://github.com/CursedPrograms/media_player.git
+cd media_player
 cmake -B build `
   -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake `
@@ -88,6 +92,7 @@ build\Release\NovPlayer.exe C:\Videos\movie.mp4
 cmake -B build -DNOV_BUILD_INSTALLER=ON [... same flags ...]
 cmake --build build --target installer
 # → installer/NovPlayer-1.0.0-Setup.exe
+# (FFMPEG_BIN_DIR must be set so the FFmpeg DLLs can be bundled)
 ```
 
 ---
@@ -123,13 +128,15 @@ cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j4
 ```
 
+MinGW builds link the GCC runtime statically, so `NovPlayer.exe` only needs `SDL2.dll` and the FFmpeg DLLs next to it (add `-DNOV_BUNDLE_FFMPEG=ON -DFFMPEG_BIN_DIR=<ffmpeg bin folder>` to copy them automatically).
+
 ---
 
 ## CMake Options
 
 | Option | Default | Description |
 |---|---|---|
-| `NOV_BUNDLE_FFMPEG` | `OFF` | Copy FFmpeg DLLs next to the exe (Windows) |
+| `NOV_BUNDLE_FFMPEG` | `OFF` | Copy the FFmpeg and SDL2 DLLs next to the exe (Windows) |
 | `FFMPEG_BIN_DIR` | *(empty)* | Path to FFmpeg bin/ containing .dll files |
 | `NOV_BUILD_INSTALLER` | `OFF` | Add `installer` CMake target (requires NSIS) |
 | `CMAKE_BUILD_TYPE` | — | `Release` for optimized build, `Debug` for dev |
@@ -139,9 +146,9 @@ cmake --build build -j4
 ## Project Structure
 
 ```
-NovPlayer/
+media_player/
 ├── CMakeLists.txt          ← Build system
-├── BUILD.md                ← This file
+├── README.md               ← This file
 ├── src/
 │   ├── main.cpp            ← Entry point, SDL2+GL window, main loop
 │   ├── player.{h,cpp}      ← FFmpeg decode pipeline (demux + audio/video threads)
@@ -237,8 +244,8 @@ The bundled FFmpeg from vcpkg/apt/brew covers H.264, H.265/HEVC, VP8, VP9, AV1, 
 
 ## Troubleshooting
 
-**"FFmpeg not found"** → Make sure the dev libraries are installed and CMake's  
-`PKG_CONFIG_PATH` or vcpkg toolchain is configured.
+**"FFmpeg not found"** → Make sure the dev libraries are installed and CMake can find them:  
+use the vcpkg toolchain file, or pass `-DCMAKE_PREFIX_PATH=<ffmpeg folder containing include/ and lib/>`.
 
 **No audio on Linux** → Install `libasound2-dev` (ALSA) or `libpulse-dev` (PulseAudio)  
 and rebuild SDL2 with audio support.

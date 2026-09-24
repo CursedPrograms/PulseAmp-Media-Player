@@ -54,8 +54,16 @@ public:
     int write(const float* src, int count);
     // Consumer – called from SDL audio callback
     int read(float* dst, int count);
-    // Visualizer tap (thread-safe snapshot of last N samples)
-    void peekLatest(float* dst, int count) const;
+    // Visualizer tap: copy of the next samples to be played (what is heard
+    // right now), without consuming them. Pads with silence if short.
+    void peekNext(float* dst, int count) const;
+
+    // Ask the consumer to drop everything currently buffered (used after a seek).
+    // Safe to call from the producer thread; the drop happens in the next read().
+    void requestDiscard() { discard_.store(true, std::memory_order_release); }
+    bool discardPending() const { return discard_.load(std::memory_order_acquire); }
+    // Consumer side: perform a requested discard now (read() does this itself)
+    void applyPendingDiscard();
 
     void reset();
     int available() const { return count_.load(std::memory_order_acquire); }
@@ -65,6 +73,7 @@ private:
     std::atomic<int>    write_{ 0 };
     std::atomic<int>    read_ { 0 };
     std::atomic<int>    count_{ 0 };
+    std::atomic<bool>   discard_{ false };
 };
 
 // ─── Player ───────────────────────────────────────────────────────────────────
@@ -92,7 +101,7 @@ public:
     // ── State accessors ───────────────────────────────────────────────────────
     PlayerState         getState()       const { return state_.load(); }
     double              getDuration()    const { return duration_; }
-    double              getCurrentTime() const { return current_time_.load(); }
+    double              getCurrentTime() const; // playback clock (what is being heard/seen)
     bool                hasVideo()       const { return video_stream_ >= 0; }
     bool                hasAudio()       const { return audio_stream_ >= 0; }
     int                 getVideoWidth()  const { return video_width_; }
@@ -108,14 +117,25 @@ public:
     std::shared_ptr<VideoFrame> pollVideoFrame(); // nullptr if none ready
     AudioRingBuffer& getAudioBuffer() { return audio_ring_; }
 
-    // ── Callbacks ─────────────────────────────────────────────────────────────
-    void setEndCallback(std::function<void()> cb) { end_cb_ = std::move(cb); }
+    // ── End of media ──────────────────────────────────────────────────────────
+    // Returns true once when playback has reached the end of the file.
+    // Call from the main thread (the UI then advances the playlist there,
+    // never from inside a decode thread).
+    bool pollEnded();
 
 private:
     void demuxLoop();
     void audioDecodeLoop();
     void videoDecodeLoop();
     void parseChapters();
+
+    // Sentinel pushed into packet queues after a seek: "flush your decoder".
+    // (nullptr in a queue means "end of file, drain the decoder".)
+    static AVPacket* flushPacket();
+    static void      freePacket(AVPacket* p);
+
+    // Wall clock used when the file has no audio stream
+    static double    nowSeconds();
 
     // ── FFmpeg state ──────────────────────────────────────────────────────────
     AVFormatContext*  fmt_ctx_   = nullptr;
@@ -132,16 +152,30 @@ private:
     int    out_sample_rate_ = 44100;
 
     std::atomic<PlayerState> state_{ PlayerState::Stopped };
-    std::atomic<double>      current_time_{ 0.0 };
     std::atomic<float>       volume_{ 1.0f };
     std::atomic<bool>        muted_{ false };
     std::atomic<bool>        seek_requested_{ false };
     std::atomic<double>      seek_target_{ 0.0 };
+    std::atomic<int>         seek_serial_{ 0 };   // bumped on every seek
     std::atomic<bool>        running_{ false };
+
+    // ── Clock ─────────────────────────────────────────────────────────────────
+    // With audio: pts at the end of the last sample written to the ring buffer;
+    // the audible time is that minus what is still buffered.
+    std::atomic<double>      audio_clock_{ 0.0 };
+    // Without audio: media time at wall_start_, advanced by wall time while playing.
+    std::atomic<double>      wall_base_{ 0.0 };
+    std::atomic<double>      wall_start_{ 0.0 };
+
+    // ── End-of-file tracking ──────────────────────────────────────────────────
+    std::atomic<bool>        eof_{ false };         // demuxer hit end of file
+    std::atomic<bool>        audio_drained_{ false };
+    std::atomic<bool>        video_drained_{ false };
+    std::atomic<bool>        end_reported_{ false };
 
     // ── Packet queues (demux → decode threads) ────────────────────────────────
     static constexpr int MAX_AUDIO_PKTS = 128;
-    static constexpr int MAX_VIDEO_PKTS = 32;
+    static constexpr int MAX_VIDEO_PKTS = 64;
 
     std::queue<AVPacket*>   audio_pkts_, video_pkts_;
     std::mutex              audio_pkt_mu_, video_pkt_mu_;
@@ -160,6 +194,5 @@ private:
     std::thread demux_th_, audio_th_, video_th_;
 
     std::vector<Chapter>      chapters_;
-    std::function<void()>     end_cb_;
     std::string               file_path_;
 };

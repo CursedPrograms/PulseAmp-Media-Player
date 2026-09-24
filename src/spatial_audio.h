@@ -4,6 +4,7 @@
 // Applied in-place on interleaved stereo float buffers.
 // ─────────────────────────────────────────────────────────────────────────────
 #include <vector>
+#include <atomic>
 
 class SpatialAudio {
 public:
@@ -14,8 +15,8 @@ public:
     // width: 0 = mono, 1 = normal stereo, 2 = extreme wide
     void process(float* buf, int frames, float width);
 
-    void setEnabled(bool e) { enabled_ = e; }
-    bool isEnabled()  const { return enabled_; }
+    void setEnabled(bool e) { enabled_.store(e); }
+    bool isEnabled()  const { return enabled_.load(); }
 
 private:
     static constexpr int MAX_DELAY = 48; // samples (~1ms at 48kHz)
@@ -23,6 +24,6 @@ private:
     int   delay_pos_ = 0;
     int   delay_samples_ = 18;
     float crossfeed_gain_ = 0.3f;
-    bool  enabled_ = false;
+    std::atomic<bool> enabled_{ false }; // toggled by the UI, read by the audio thread
     int   sample_rate_ = 44100;
 };

@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <mutex>
 
 class UIManager {
 public:
@@ -33,6 +34,10 @@ public:
     // Returns false to signal quit
     bool handleEvent(const SDL_Event& e);
     void render(int window_w, int window_h, double time);
+
+    // Add a file or folder (recursively) to the playlist / start playing an entry
+    void addToPlaylist(const std::string& path);
+    void playEntry(int idx);
 
 private:
     // ── Sub-panels ────────────────────────────────────────────────────────────
@@ -50,8 +55,6 @@ private:
     // ── Helpers ───────────────────────────────────────────────────────────────
     void openFile();
     void openFolder();
-    void addToPlaylist(const std::string& path);
-    void playEntry(int idx);
     std::string formatTime(double s) const;
     void drawWaveformSeekBar(float x, float y, float w, float h);
 
@@ -84,13 +87,18 @@ private:
     int          conv_vid_kbps_  = 2000;
     bool         conv_strip_vid_ = false;
     bool         conv_strip_aud_ = false;
-    ConvertProgress conv_prog_;
+    ConvertProgress conv_prog_;       // written by the converter thread: guard with conv_mu_
+    std::mutex   conv_mu_;
     std::string  conv_source_path_;
 
-    // Waveform data (async-loaded)
+    // Waveform data (async-loaded). The generator thread hands results over
+    // through waveform_pending_ (guarded by waveform_mu_); render() picks them up.
     std::vector<float> waveform_peaks_;
     bool               waveform_ready_ = false;
     std::string        waveform_path_;
+    std::mutex         waveform_mu_;
+    std::vector<float> waveform_pending_;
+    bool               waveform_pending_ready_ = false;
 
     // Mood color auto-update
     bool         mood_color_     = false;

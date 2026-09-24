@@ -7,17 +7,29 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
-
+  build-linux:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential cmake ninja-build \
+          libavformat-dev libavcodec-dev libavutil-dev \
+          libswscale-dev libswresample-dev \
+          libsdl2-dev libgl1-mesa-dev
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Upload binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: NovPlayer-linux-x64
+        path: build/NovPlayer

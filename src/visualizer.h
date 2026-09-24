@@ -67,7 +67,7 @@ private:
     ImU32  color_ = IM_COL32(0, 255, 100, 255);
 
     // Time-domain buffer (latest samples)
-    std::array<float, VIZ_FFT_SIZE> time_buf_{};
+    std::array<float, VIZ_FFT_SIZE * 2> time_buf_{}; // interleaved stereo
     // FFT input/output
     std::vector<std::complex<float>> fft_buf_;
     // Smoothed magnitude bars

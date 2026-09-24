@@ -18,9 +18,10 @@ Visualizer::Visualizer() : rng_(std::random_device{}()) {
 
 // ─── Feed ─────────────────────────────────────────────────────────────────────
 void Visualizer::feed(const AudioRingBuffer& ring) {
-    ring.peekLatest(time_buf_.data(), VIZ_FFT_SIZE);
+    // VIZ_FFT_SIZE stereo frames = VIZ_FFT_SIZE * 2 interleaved samples
+    ring.peekNext(time_buf_.data(), (int)time_buf_.size());
     // Copy to wave buf (mono mix L+R)
-    for (int i = 0; i < VIZ_FFT_SIZE / 2; ++i)
+    for (int i = 0; i < VIZ_FFT_SIZE; ++i)
         wave_buf_[i] = (time_buf_[i * 2] + time_buf_[i * 2 + 1]) * 0.5f;
 
     computeFFT();
@@ -66,8 +67,7 @@ void Visualizer::computeFFT() {
     // Fill FFT buffer with mono samples * Hann window
     for (int i = 0; i < VIZ_FFT_SIZE; ++i) {
         float hann = 0.5f * (1.f - std::cos(2.f*(float)M_PI*i / (VIZ_FFT_SIZE - 1)));
-        float mono = (time_buf_[i*2 % VIZ_FFT_SIZE] + time_buf_[(i*2+1) % VIZ_FFT_SIZE]) * 0.5f;
-        fft_buf_[i] = {mono * hann, 0.f};
+        fft_buf_[i] = {wave_buf_[i] * hann, 0.f};
     }
     fftCooleyTukey(fft_buf_);
 }
@@ -88,6 +88,8 @@ void Visualizer::computeMagnitudes() {
             float re = fft_buf_[k].real(), im = fft_buf_[k].imag();
             mag = std::max(mag, std::sqrt(re*re + im*im));
         }
+        // Scale so a full-scale sine reads 0 dB (one-sided spectrum, Hann gain 0.5)
+        mag *= 4.f / VIZ_FFT_SIZE;
         // Convert to dB, normalise 0..1
         float db = 20.f * std::log10f(std::max(mag, 1e-6f));
         float norm = (db + 70.f) / 70.f; // -70 dB → 0,  0 dB → 1

@@ -100,6 +100,7 @@ int main(int argc, char* argv[]) {
     WaveformGenerator waveform;
 
     spatial.init(44100);
+    audio.setSpatial(&spatial);
 
     // Apply default theme
     themes.applyTheme(Theme::NeonAmp);
@@ -108,21 +109,10 @@ int main(int argc, char* argv[]) {
     UIManager ui(player, audio, video, viz, themes, conv, playlist, bpm, spatial, waveform);
 
     // ── Command-line files ────────────────────────────────────────────────────
-    for (int i = 1; i < argc; ++i) {
-        std::string path = argv[i];
-        playlist.addFile(path);
-    }
-    if (playlist.size() > 0) {
-        // Play first file
-        playlist.setIndex(0);
-        const PlaylistEntry* pe = playlist.current();
-        if (pe && player.open(pe->path)) {
-            audio.open(player.getSampleRate(), player.getChannels(),
-                       &player.getAudioBuffer());
-            if (player.hasVideo())
-                video.init(player.getVideoWidth(), player.getVideoHeight());
-        }
-    }
+    for (int i = 1; i < argc; ++i)
+        ui.addToPlaylist(argv[i]);
+    if (playlist.size() > 0)
+        ui.playEntry(0);
 
     // ── Main loop ─────────────────────────────────────────────────────────────
     bool running = true;

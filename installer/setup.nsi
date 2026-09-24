@@ -1,17 +1,26 @@
 ; ─── installer/setup.nsi ───────────────────────────────────────────────────────
 ; NSIS installer for NovPlayer
-; Build: makensis /DPRODUCT_VERSION=1.0.0 /DAPP_EXE=path\to\NovPlayer.exe setup.nsi
+; Normally built by CMake:  cmake --build build --target installer
+; Manual build:
+;   makensis /DPRODUCT_VERSION=1.0.0 /DAPP_EXE=path\to\NovPlayer.exe
+;            /DSDL2_DLL=path\to\SDL2.dll /DFFMPEG_DLLS_DIR=path\to\ffmpeg\bin setup.nsi
+; Paths below are relative to this folder (makensis runs from the script's directory).
 ; ──────────────────────────────────────────────────────────────────────────────
 
 !define PRODUCT_NAME    "NovPlayer"
-!define PRODUCT_PUBLISHER "NovPlayer Project"
-!define PRODUCT_URL     "https://github.com/yourname/novplayer"
+!define PRODUCT_PUBLISHER "Cursed Entertainment"
+!define PRODUCT_URL     "https://github.com/CursedPrograms/media_player"
 !define INSTALL_DIR     "$PROGRAMFILES64\NovPlayer"
 !define REG_KEY         "Software\Microsoft\Windows\CurrentVersion\Uninstall\NovPlayer"
+!define PROG_ID         "NovPlayer.Media"
 
 ; Bundled FFmpeg DLL directory – set at build time or adjust below
 !ifndef FFMPEG_DLLS_DIR
   !define FFMPEG_DLLS_DIR "..\ffmpeg-win64\bin"
+!endif
+
+!ifndef SDL2_DLL
+  !define SDL2_DLL "..\build\Release\SDL2.dll"
 !endif
 
 !ifndef APP_EXE
@@ -38,38 +47,57 @@ Page instfiles
 UninstPage uninstConfirm
 UninstPage instfiles
 
-LicenseData "..\LICENSE.txt"
+LicenseData "..\LICENSE"
+
+; ── File associations ─────────────────────────────────────────────────────────
+; Adds NovPlayer to each extension's "Open with" list without taking over the
+; user's default app (Windows only lets the user change defaults).
+!macro AddOpenWith EXT
+  WriteRegStr HKLM "Software\Classes\${EXT}\OpenWithProgids" "${PROG_ID}" ""
+  WriteRegStr HKLM "Software\Classes\Applications\NovPlayer.exe\SupportedTypes" "${EXT}" ""
+!macroend
+
+!macro RemoveOpenWith EXT
+  DeleteRegValue HKLM "Software\Classes\${EXT}\OpenWithProgids" "${PROG_ID}"
+!macroend
+
+!macro ForEachMediaExt MACRO
+  !insertmacro ${MACRO} ".mkv"
+  !insertmacro ${MACRO} ".mp4"
+  !insertmacro ${MACRO} ".avi"
+  !insertmacro ${MACRO} ".mov"
+  !insertmacro ${MACRO} ".webm"
+  !insertmacro ${MACRO} ".mp3"
+  !insertmacro ${MACRO} ".flac"
+  !insertmacro ${MACRO} ".wav"
+  !insertmacro ${MACRO} ".ogg"
+  !insertmacro ${MACRO} ".aac"
+  !insertmacro ${MACRO} ".opus"
+  !insertmacro ${MACRO} ".m4a"
+!macroend
 
 ; ── Installer sections ────────────────────────────────────────────────────────
 Section "NovPlayer (required)" SEC_MAIN
   SectionIn RO
   SetOutPath "$INSTDIR"
+  SetShellVarContext all
 
   ; Main executable
   File "${APP_EXE}"
 
   ; SDL2 runtime
-  File /oname=SDL2.dll "SDL2.dll"
+  File "${SDL2_DLL}"
 
-  ; FFmpeg DLLs – the six required libraries
-  File /oname=avcodec-61.dll   "${FFMPEG_DLLS_DIR}\avcodec-61.dll"
-  File /oname=avformat-61.dll  "${FFMPEG_DLLS_DIR}\avformat-61.dll"
-  File /oname=avutil-59.dll    "${FFMPEG_DLLS_DIR}\avutil-59.dll"
-  File /oname=swscale-8.dll    "${FFMPEG_DLLS_DIR}\swscale-8.dll"
-  File /oname=swresample-5.dll "${FFMPEG_DLLS_DIR}\swresample-5.dll"
-  File /oname=avfilter-10.dll  "${FFMPEG_DLLS_DIR}\avfilter-10.dll"
+  ; FFmpeg DLLs (whatever version the app was built against)
+  File "${FFMPEG_DLLS_DIR}\*.dll"
 
   ; ── File associations ────────────────────────────────────────────────────────
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".mkv"  "MKV Video"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".mp4"  "MP4 Video"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".avi"  "AVI Video"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".mov"  "MOV Video"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".mp3"  "MP3 Audio"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".flac" "FLAC Audio"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".wav"  "WAV Audio"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".ogg"  "OGG Audio"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".aac"  "AAC Audio"
-  ${RegisterExtension} "$INSTDIR\NovPlayer.exe" ".opus" "Opus Audio"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}" "" "NovPlayer media file"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\DefaultIcon" "" "$INSTDIR\NovPlayer.exe,0"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\shell\open\command" "" '"$INSTDIR\NovPlayer.exe" "%1"'
+  WriteRegStr HKLM "Software\Classes\Applications\NovPlayer.exe\shell\open\command" "" '"$INSTDIR\NovPlayer.exe" "%1"'
+  !insertmacro ForEachMediaExt AddOpenWith
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)' ; SHCNE_ASSOCCHANGED
 
   ; ── Shortcuts ────────────────────────────────────────────────────────────────
   CreateDirectory "$SMPROGRAMS\NovPlayer"
@@ -81,34 +109,35 @@ Section "NovPlayer (required)" SEC_MAIN
   ; ── Registry ─────────────────────────────────────────────────────────────────
   WriteRegStr   HKLM "${REG_KEY}" "DisplayName"    "${PRODUCT_NAME}"
   WriteRegStr   HKLM "${REG_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+  WriteRegStr   HKLM "${REG_KEY}" "DisplayIcon"    "$INSTDIR\NovPlayer.exe"
   WriteRegStr   HKLM "${REG_KEY}" "Publisher"      "${PRODUCT_PUBLISHER}"
   WriteRegStr   HKLM "${REG_KEY}" "URLInfoAbout"   "${PRODUCT_URL}"
   WriteRegStr   HKLM "${REG_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr   HKLM "${REG_KEY}" "UninstallString" "$INSTDIR\uninstall.exe"
+  WriteRegStr   HKLM "${REG_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegDWORD HKLM "${REG_KEY}" "NoModify"       1
   WriteRegDWORD HKLM "${REG_KEY}" "NoRepair"       1
   WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
 
-; Optional: Visual C++ Redistributable check
+; Optional: Visual C++ runtime (only needed for MSVC builds; MinGW builds link
+; their runtime statically). Pass /DVC_REDIST=path\to\vc_redist.x64.exe to include it.
+!ifdef VC_REDIST
 Section "VC++ Runtime" SEC_VCRT
-  ; Download and run vc_redist.x64.exe if not present
   IfFileExists "$SYSDIR\vcruntime140.dll" done
-    ExecWait '"$INSTDIR\vc_redist.x64.exe" /install /quiet /norestart'
+    SetOutPath "$PLUGINSDIR"
+    File "/oname=vc_redist.x64.exe" "${VC_REDIST}"
+    ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart'
   done:
 SectionEnd
+!endif
 
 ; ── Uninstaller ───────────────────────────────────────────────────────────────
 Section "Uninstall"
+  SetShellVarContext all
+
   ; Remove files
   Delete "$INSTDIR\NovPlayer.exe"
-  Delete "$INSTDIR\SDL2.dll"
-  Delete "$INSTDIR\avcodec-61.dll"
-  Delete "$INSTDIR\avformat-61.dll"
-  Delete "$INSTDIR\avutil-59.dll"
-  Delete "$INSTDIR\swscale-8.dll"
-  Delete "$INSTDIR\swresample-5.dll"
-  Delete "$INSTDIR\avfilter-10.dll"
+  Delete "$INSTDIR\*.dll"
   Delete "$INSTDIR\uninstall.exe"
   RMDir  "$INSTDIR"
 
@@ -118,12 +147,10 @@ Section "Uninstall"
   Delete "$DESKTOP\NovPlayer.lnk"
 
   ; File associations
-  ${UnRegisterExtension} ".mkv"  "MKV Video"
-  ${UnRegisterExtension} ".mp4"  "MP4 Video"
-  ${UnRegisterExtension} ".avi"  "AVI Video"
-  ${UnRegisterExtension} ".mp3"  "MP3 Audio"
-  ${UnRegisterExtension} ".flac" "FLAC Audio"
-  ${UnRegisterExtension} ".wav"  "WAV Audio"
+  !insertmacro ForEachMediaExt RemoveOpenWith
+  DeleteRegKey HKLM "Software\Classes\${PROG_ID}"
+  DeleteRegKey HKLM "Software\Classes\Applications\NovPlayer.exe"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 
   ; Registry
   DeleteRegKey HKLM "${REG_KEY}"

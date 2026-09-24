@@ -1,0 +1,12 @@
+# Build output
+build/
+out/
+.vs/
+*.exe
+*.dll
+
+# Installer output
+installer/*.exe
+
+# Portable builds
+dist/

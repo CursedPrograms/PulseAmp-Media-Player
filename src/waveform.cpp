@@ -46,9 +46,15 @@ void WaveformGenerator::generateThread(std::string path, int num_buckets,
     }
 
     const AVCodec* codec = avcodec_find_decoder(fmt->streams[audio_idx]->codecpar->codec_id);
-    AVCodecContext* ctx = avcodec_alloc_context3(codec);
-    avcodec_parameters_to_context(ctx, fmt->streams[audio_idx]->codecpar);
-    avcodec_open2(ctx, codec, nullptr);
+    AVCodecContext* ctx = codec ? avcodec_alloc_context3(codec) : nullptr;
+    if (!ctx ||
+        avcodec_parameters_to_context(ctx, fmt->streams[audio_idx]->codecpar) < 0 ||
+        avcodec_open2(ctx, codec, nullptr) < 0) {
+        // No usable decoder for this audio stream
+        avcodec_free_context(&ctx);
+        avformat_close_input(&fmt);
+        running_.store(false); callback(peaks); return;
+    }
 
     SwrContext* swr = swr_alloc();
     AVChannelLayout mono_layout = AV_CHANNEL_LAYOUT_MONO;

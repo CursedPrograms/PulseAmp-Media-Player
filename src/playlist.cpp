@@ -110,7 +110,9 @@ void Playlist::setShuffle(bool s) {
 
 // ─── Smart Resume ─────────────────────────────────────────────────────────────
 void Playlist::savePosition(const std::string& path, double seconds) {
-    resume_map_[path] = seconds;
+    // Positions this close to the start aren't worth resuming (see getSavedPosition)
+    if (seconds > 2.0) resume_map_[path] = seconds;
+    else               resume_map_.erase(path);
 }
 
 std::optional<double> Playlist::getSavedPosition(const std::string& path) const {
@@ -133,8 +135,12 @@ void Playlist::loadResume() {
     while (std::getline(f, line)) {
         auto tab = line.find('\t');
         if (tab == std::string::npos) continue;
-        double pos  = std::stod(line.substr(0, tab));
-        std::string path = line.substr(tab + 1);
-        resume_map_[path] = pos;
+        try {
+            double pos  = std::stod(line.substr(0, tab));
+            std::string path = line.substr(tab + 1);
+            resume_map_[path] = pos;
+        } catch (const std::exception&) {
+            // Skip a corrupt line instead of crashing at startup
+        }
     }
 }
