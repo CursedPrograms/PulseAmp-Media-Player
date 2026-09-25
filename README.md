@@ -7,6 +7,8 @@
   </a>
 </div>
 
+![PulseAmp](assets/promo/banner.jpg)
+
 # PulseAmp (media_player)
 
 A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video and audio playback, YouTube and SoundCloud, MilkDrop visualizations, Winamp skins, real-time BPM detection, a waveform seek bar, smart resume, a stereo widener and a built-in format converter.
@@ -25,6 +27,8 @@ A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video 
 | YouTube search + MilkDrop | Vaporwave theme + theme editor |
 |---|---|
 | ![Searching YouTube in the Online tab while MilkDrop plays](assets/screenshots/main.png) | ![The Vaporwave theme with the theme editor open](assets/screenshots/themes.png) |
+| **Settings panel** | **About window** |
+| ![The Settings tab: playback, visualizer, MilkDrop, spatial audio, skins and themes](assets/screenshots/settings.png) | ![The About PulseAmp window](assets/screenshots/about.png) |
 
 **Classic mode skins:** PulseOrb (round) and NeonCapsule (shaped from its PNG)
 

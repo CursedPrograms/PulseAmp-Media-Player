@@ -65,6 +65,21 @@ header {
   margin: 12px auto 0; max-width: 560px; padding: 10px 14px; font-size: 14px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--dim);
 }
+/* Two columns: text + downloads on the left, promo art on the right */
+.hero-grid {
+  display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 24px; align-items: center;
+  text-align: left;
+}
+.hero-grid .lead { margin-left: 0; }
+.hero-grid .downloads { display: grid; grid-template-columns: 1fr 1fr; justify-content: stretch; }
+.hero-grid .btn { min-width: 0; }
+.hero-grid .os-note { margin-left: 0; }
+.hero-art img {
+  width: 100%;
+  /* fade the photo's edges into the page background */
+  -webkit-mask-image: radial-gradient(ellipse 58% 62% at 54% 46%, #000 50%, transparent 100%);
+          mask-image: radial-gradient(ellipse 58% 62% at 54% 46%, #000 50%, transparent 100%);
+}
 .hero-shot {
   margin: 48px auto 0; border-radius: var(--radius); overflow: hidden;
   border: 1px solid var(--line);
@@ -113,7 +128,15 @@ footer strong { color: var(--text); }
 footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
 footer .thanks { margin-top: 18px; }
 
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr; text-align: center; }
+  .hero-grid .lead, .hero-grid .os-note { margin-left: auto; }
+  .hero-art { order: -1; }
+  .hero-art img { max-height: 380px; object-fit: cover; object-position: 50% 30%; }
+}
+
 @media (max-width: 760px) {
+  .hero-grid .downloads { grid-template-columns: 1fr; }
   .nav nav { display: none; }
   .skins, .gallery { grid-template-columns: 1fr; }
   .btn { min-width: 0; width: 100%; }
