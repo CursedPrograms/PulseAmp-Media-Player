@@ -29,6 +29,8 @@ InstallDirRegKey HKLM "${REG_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 SetCompressor   /SOLID lzma
 ShowInstDetails show
+Icon            "..\assets\icon\pulseamp.ico"
+UninstallIcon   "..\assets\icon\pulseamp.ico"
 
 ; Installer file properties (credits)
 VIProductVersion "${PRODUCT_VERSION}.0"

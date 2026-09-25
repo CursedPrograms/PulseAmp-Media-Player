@@ -1,14 +1,18 @@
-name: C/C++ CI
+name: Build
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # publish the Linux AppImage to the "continuous" release
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  linux:
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
@@ -17,10 +21,10 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
-          build-essential cmake ninja-build \
+          build-essential cmake ninja-build file wget unzip \
           libavformat-dev libavcodec-dev libavutil-dev \
           libswscale-dev libswresample-dev \
-          libsdl2-dev libgl1-mesa-dev
+          libsdl2-dev libgl1-mesa-dev libx11-dev libxext-dev
 
     - name: Configure
       run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -28,8 +32,55 @@ jobs:
     - name: Build
       run: cmake --build build
 
-    - name: Upload binary
+    # ── AppImage ──────────────────────────────────────────────────────────────
+    # Everything the app looks for next to its executable goes in usr/bin:
+    # skins, MilkDrop presets + textures, yt-dlp.
+    - name: Assemble AppDir
+      run: |
+        mkdir -p AppDir/usr/bin
+        cp build/PulseAmp AppDir/usr/bin/
+        cp -r build/skins AppDir/usr/bin/skins
+
+        wget -q -O presets.zip https://github.com/projectM-visualizer/presets-cream-of-the-crop/archive/refs/heads/master.zip
+        wget -q -O textures.zip https://github.com/projectM-visualizer/presets-milkdrop-texture-pack/archive/refs/heads/master.zip
+        unzip -q presets.zip && unzip -q textures.zip
+        mkdir -p AppDir/usr/bin/presets
+        find presets-cream-of-the-crop-master -mindepth 1 -maxdepth 1 -type d -exec cp -r {} AppDir/usr/bin/presets/ \;
+        cp -r presets-milkdrop-texture-pack-master/textures AppDir/usr/bin/textures
+
+        wget -q -O AppDir/usr/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+        chmod +x AppDir/usr/bin/yt-dlp
+
+    - name: Build AppImage
+      env:
+        APPIMAGE_EXTRACT_AND_RUN: 1          # no FUSE on the CI runners
+        LDAI_OUTPUT: PulseAmp-x86_64.AppImage
+        LD_LIBRARY_PATH: ${{ github.workspace }}/build   # projectM .so files
+      run: |
+        wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        chmod +x linuxdeploy-x86_64.AppImage
+        ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+          --executable AppDir/usr/bin/PulseAmp \
+          --desktop-file packaging/linux/pulseamp.desktop \
+          --icon-file assets/icon/pulseamp.png \
+          --output appimage
+        ls -la PulseAmp-x86_64.AppImage
+
+    - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: PulseAmp-linux-x64
-        path: build/PulseAmp
+        name: PulseAmp-linux-x86_64
+        path: PulseAmp-x86_64.AppImage
+
+    # The website links to releases/download/continuous/PulseAmp-x86_64.AppImage
+    - name: Publish to the "continuous" release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        git tag -f continuous
+        git push -f origin continuous
+        gh release view continuous >/dev/null 2>&1 || \
+          gh release create continuous --title "PulseAmp (latest build)" \
+            --notes "Automatic build of the main branch. Linux: download PulseAmp-x86_64.AppImage, make it executable (chmod +x) and run it. Windows downloads: https://cursedprograms.github.io/PulseAmp-Media-Player/"
+        gh release upload continuous PulseAmp-x86_64.AppImage --clobber

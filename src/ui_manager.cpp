@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <cstdio>
+#include <cctype>
 #include <chrono>
 
 #ifdef _WIN32

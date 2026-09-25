@@ -1,7 +1,8 @@
 #pragma once
 // ─── skin_window.h ────────────────────────────────────────────────────────────
 // Give an SDL window a custom (non-rectangular) shape from a mask, the way
-// Winamp's skins did. Windows only; elsewhere the window stays rectangular.
+// Winamp's skins did. Windows (window regions) and Linux/X11 (Shape extension);
+// elsewhere the window stays rectangular.
 // ─────────────────────────────────────────────────────────────────────────────
 #include <SDL2/SDL.h>
 #include <cstdint>

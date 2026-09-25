@@ -61,6 +61,8 @@ int main(int argc, char* argv[]) {
     // ── SDL init ──────────────────────────────────────────────────────────────
     // Real pixels on high-DPI Windows displays (we scale the UI ourselves)
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
+    SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");        // window/taskbar icon
+    SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) < 0) {
         std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
         return 1;

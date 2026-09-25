@@ -82,9 +82,21 @@ void Fonts::build(float scale) {
     const char* cjk_fonts[] = { "/System/Library/Fonts/Hiragino Sans GB.ttc",
                                 "/System/Library/Fonts/AppleSDGothicNeo.ttc" };
 #else
-    const char* main_font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-    const char* sym_font  = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    // First font that exists (Debian/Ubuntu, Fedora, Arch locations)
+    static const char* main_fonts[] = {
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" };
+    const char* main_font = main_fonts[0];
+    for (const char* f : main_fonts) if (exists(f)) { main_font = f; break; }
+    const char* sym_font  = main_font;
     const char* cjk_fonts[] = { "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                                "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+                                "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
                                 "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf" };
 #endif
 

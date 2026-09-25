@@ -1,12 +1,22 @@
 // PulseAmp website: small enhancements (the page works fine without JavaScript)
 
-// Downloads are Windows-only: point other systems at the build instructions
+// Tailor the download area to the visitor's system
 (function showOsNote() {
-  const note = document.getElementById("os-note");
-  if (!note) return;
-  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-  const isWindows = /win/i.test(platform) || /windows/i.test(navigator.userAgent);
-  if (!isWindows) note.hidden = false;
+  const platform = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "") +
+                   " " + navigator.userAgent;
+  const isWindows = /win/i.test(platform);
+  const isLinux = /linux|x11/i.test(platform) && !/android/i.test(platform);
+  if (isLinux) {
+    const note = document.getElementById("os-note-linux");
+    if (note) note.hidden = false;
+    // Make the AppImage the highlighted download
+    document.querySelectorAll(".downloads .btn").forEach((b) => b.classList.remove("primary"));
+    const linux = document.getElementById("linux-download");
+    if (linux) { linux.classList.add("primary"); linux.parentNode.prepend(linux); }
+  } else if (!isWindows) {
+    const note = document.getElementById("os-note-other");
+    if (note) note.hidden = false;
+  }
 })();
 
 // Highlight the menu link of the section currently on screen

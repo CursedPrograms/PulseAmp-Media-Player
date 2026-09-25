@@ -13,7 +13,10 @@ A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video 
 
 ## Download
 
-**[cursedprograms.github.io/PulseAmp-Media-Player](https://cursedprograms.github.io/PulseAmp-Media-Player/)**: installer, portable zip and MilkDrop presets for Windows 10/11 (64-bit). The files are also in [`dist/`](dist/).
+**[cursedprograms.github.io/PulseAmp-Media-Player](https://cursedprograms.github.io/PulseAmp-Media-Player/)**
+
+- **Windows 10/11 (64-bit):** installer, portable zip and MilkDrop presets. The files are also in [`dist/`](dist/).
+- **Linux (x86-64):** [PulseAmp-x86_64.AppImage](https://github.com/CursedPrograms/PulseAmp-Media-Player/releases/download/continuous/PulseAmp-x86_64.AppImage), built automatically from `main` with everything included. Run `chmod +x PulseAmp-x86_64.AppImage` and start it. Needs a 2024-or-newer distro (Ubuntu 24.04, Fedora 40, Debian 13, Arch...); file dialogs use `zenity`.
 
 ## Screenshots
 
@@ -66,6 +69,7 @@ sudo apt install -y \
     libavformat-dev libavcodec-dev libavutil-dev \
     libswscale-dev libswresample-dev \
     libsdl2-dev libgl1-mesa-dev libglu1-mesa-dev \
+    libx11-dev libxext-dev \
     zenity           # optional: file-open dialog
 ```
 

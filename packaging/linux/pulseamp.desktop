@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=PulseAmp
+GenericName=Media Player
+Comment=Media player with YouTube & SoundCloud, MilkDrop visualizations and Winamp skins
+Exec=PulseAmp %U
+Icon=pulseamp
+Terminal=false
+Categories=AudioVideo;Audio;Video;Player;
+MimeType=audio/mpeg;audio/flac;audio/x-wav;audio/ogg;audio/aac;audio/mp4;audio/opus;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;
+Keywords=music;video;player;winamp;milkdrop;youtube;soundcloud;

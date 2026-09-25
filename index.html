@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PulseAmp Media Player</title>
-<meta name="description" content="PulseAmp: a free media player for Windows with YouTube and SoundCloud, MilkDrop visualizations and Winamp skins.">
+<meta name="description" content="PulseAmp: a free media player for Windows and Linux with YouTube and SoundCloud, MilkDrop visualizations and Winamp skins.">
 <meta property="og:title" content="PulseAmp Media Player">
-<meta property="og:description" content="YouTube & SoundCloud, MilkDrop visualizations, Winamp skins, themes. Free for Windows.">
+<meta property="og:description" content="YouTube & SoundCloud, MilkDrop visualizations, Winamp skins, themes. Free for Windows and Linux.">
 <meta property="og:image" content="https://cursedprograms.github.io/PulseAmp-Media-Player/assets/screenshots/milkdrop.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230e0e16'/%3E%3Cpath d='M8 34h10l5-14 8 28 7-22 5 8h13' fill='none' stroke='%2300ff8c' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/css/style.css">
@@ -31,7 +31,7 @@
 <main>
   <div class="wrap hero" id="download">
     <h1>PulseAmp</h1>
-    <p class="lead">A free media player for Windows with YouTube and SoundCloud, MilkDrop visualizations and real Winamp skins.</p>
+    <p class="lead">A free media player for Windows and Linux with YouTube and SoundCloud, MilkDrop visualizations and real Winamp skins.</p>
     <div class="downloads">
       <a class="btn primary" href="dist/PulseAmp-Setup.exe" download>
         <strong>Download installer</strong>
@@ -45,10 +45,18 @@
         <strong>MilkDrop presets</strong>
         <span>9,795 presets, for the portable zip</span>
       </a>
+      <a class="btn" id="linux-download" href="https://github.com/CursedPrograms/PulseAmp-Media-Player/releases/download/continuous/PulseAmp-x86_64.AppImage">
+        <strong>Linux (AppImage)</strong>
+        <span>One file, everything included</span>
+      </a>
     </div>
-    <p class="meta">Version 1.0.0 &middot; Windows 10 / 11, 64-bit &middot; Free and open source (MIT)</p>
-    <p class="os-note" id="os-note" hidden>
-      These downloads are for Windows. On Linux or macOS you can
+    <p class="meta">Version 1.0.0 &middot; Windows 10 / 11 (64-bit) and Linux (x86-64) &middot; Free and open source (MIT)</p>
+    <p class="os-note" id="os-note-linux" hidden>
+      On Linux, get the <b>AppImage</b>: make it executable (<code>chmod +x PulseAmp-x86_64.AppImage</code>) and run it.
+      Needs a 2024-or-newer distro (e.g. Ubuntu 24.04, Fedora 40, Debian 13, Arch).
+    </p>
+    <p class="os-note" id="os-note-other" hidden>
+      There's no ready-made download for your system yet, but you can
       <a href="https://github.com/CursedPrograms/PulseAmp-Media-Player#build-instructions">build PulseAmp from source</a>.
     </p>
     <div class="hero-shot">
@@ -134,7 +142,7 @@
       <div class="steps">
         <div class="step">
           <h3>Install</h3>
-          <p>Run <b>PulseAmp-Setup.exe</b>, or extract the portable zip anywhere. For MilkDrop in the portable version, also extract the presets zip into the PulseAmp folder.</p>
+          <p>Windows: run <b>PulseAmp-Setup.exe</b>, or extract the portable zip anywhere (for MilkDrop, also extract the presets zip into the PulseAmp folder). Linux: <code>chmod +x</code> the AppImage and run it.</p>
         </div>
         <div class="step">
           <h3>Play something</h3>
