@@ -1,0 +1,47 @@
+{
+  // PulseOrb: a round player drawn entirely from this file (no images).
+  // See skins/README.md for the format.
+  "name": "PulseOrb",
+  "author": "Farica Kimora / Cursed Entertainment",
+  "width": 360,
+  "height": 360,
+  "shape": "circle",
+  "background_color": "#0e0e16",
+  "accent": "#00ff8c",
+
+  "controls": [
+    { "type": "button", "action": "minimize", "rect": [124, 36, 22, 22], "shape": "circle",
+      "color": "#6a7a88", "color_hover": "#ffffff", "background_hover": "#ffffff18" },
+    { "type": "button", "action": "menu",     "rect": [169, 30, 22, 22], "shape": "circle",
+      "color": "#6a7a88", "color_hover": "#ffffff", "background_hover": "#ffffff18" },
+    { "type": "button", "action": "close",    "rect": [214, 36, 22, 22], "shape": "circle",
+      "color": "#6a7a88", "color_hover": "#ff5a6a", "background_hover": "#ff5a6a22" },
+
+    { "type": "visualizer", "mode": "current", "rect": [66, 66, 228, 150],
+      "background": "#00000055", "shape": "rounded", "radius": 14 },
+
+    { "type": "toggle", "action": "shuffle", "rect": [34, 166, 28, 28], "shape": "circle",
+      "color": "#55606a", "color_on": "#00ff8c", "background_hover": "#ffffff14" },
+    { "type": "toggle", "action": "repeat",  "rect": [298, 166, 28, 28], "shape": "circle",
+      "color": "#55606a", "color_on": "#00ff8c", "background_hover": "#ffffff14" },
+
+    { "type": "text", "content": "title", "rect": [70, 224, 220, 22], "align": "center",
+      "scroll": true, "font_size": 16, "color": "#e6fff0" },
+    { "type": "text", "content": "time_total", "rect": [70, 246, 220, 16], "align": "center",
+      "font_size": 12, "color": "#6fb58e" },
+
+    { "type": "slider", "action": "seek", "rect": [72, 268, 216, 5], "radius": 6,
+      "background": "#ffffff20", "fill": "#00ff8c", "color": "#ffffff" },
+
+    { "type": "button", "action": "prev", "rect": [100, 286, 36, 36], "shape": "circle",
+      "color": "#c8d4dc", "color_hover": "#ffffff", "background_hover": "#ffffff14" },
+    { "type": "toggle", "action": "playpause", "rect": [157, 281, 46, 46], "shape": "circle",
+      "background": "#00ff8c", "background_hover": "#5dffb4", "background_pressed": "#00c46c",
+      "color": "#0e0e16" },
+    { "type": "button", "action": "next", "rect": [224, 286, 36, 36], "shape": "circle",
+      "color": "#c8d4dc", "color_hover": "#ffffff", "background_hover": "#ffffff14" },
+
+    { "type": "slider", "action": "volume", "rect": [130, 336, 100, 4], "radius": 5,
+      "background": "#ffffff18", "fill": "#6fb58e", "color": "#e6fff0" }
+  ]
+}

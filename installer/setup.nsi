@@ -1,30 +1,20 @@
 ; ─── installer/setup.nsi ───────────────────────────────────────────────────────
-; NSIS installer for NovPlayer
-; Normally built by CMake:  cmake --build build --target installer
-; Manual build:
-;   makensis /DPRODUCT_VERSION=1.0.0 /DAPP_EXE=path\to\NovPlayer.exe
-;            /DSDL2_DLL=path\to\SDL2.dll /DFFMPEG_DLLS_DIR=path\to\ffmpeg\bin setup.nsi
+; NSIS installer for PulseAmp: installs the portable build folder.
+; Normally built by  scripts\package-windows.ps1 -Installer  or manually:
+;   makensis /DPRODUCT_VERSION=1.0.0 /DDIST_DIR=C:\path\to\dist\PulseAmp setup.nsi
 ; Paths below are relative to this folder (makensis runs from the script's directory).
 ; ──────────────────────────────────────────────────────────────────────────────
 
-!define PRODUCT_NAME    "NovPlayer"
+!define PRODUCT_NAME    "PulseAmp"
 !define PRODUCT_PUBLISHER "Cursed Entertainment"
 !define PRODUCT_URL     "https://github.com/CursedPrograms/media_player"
-!define INSTALL_DIR     "$PROGRAMFILES64\NovPlayer"
-!define REG_KEY         "Software\Microsoft\Windows\CurrentVersion\Uninstall\NovPlayer"
-!define PROG_ID         "NovPlayer.Media"
+!define INSTALL_DIR     "$PROGRAMFILES64\PulseAmp"
+!define REG_KEY         "Software\Microsoft\Windows\CurrentVersion\Uninstall\PulseAmp"
+!define PROG_ID         "PulseAmp.Media"
 
-; Bundled FFmpeg DLL directory – set at build time or adjust below
-!ifndef FFMPEG_DLLS_DIR
-  !define FFMPEG_DLLS_DIR "..\ffmpeg-win64\bin"
-!endif
-
-!ifndef SDL2_DLL
-  !define SDL2_DLL "..\build\Release\SDL2.dll"
-!endif
-
-!ifndef APP_EXE
-  !define APP_EXE "..\build\Release\NovPlayer.exe"
+; The portable build (PulseAmp.exe, DLLs, yt-dlp, presets, textures, skins)
+!ifndef DIST_DIR
+  !define DIST_DIR "..\dist\PulseAmp"
 !endif
 
 !ifndef PRODUCT_VERSION
@@ -33,12 +23,20 @@
 
 ; ── NSIS settings ─────────────────────────────────────────────────────────────
 Name            "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile         "NovPlayer-${PRODUCT_VERSION}-Setup.exe"
+OutFile         "PulseAmp-${PRODUCT_VERSION}-Setup.exe"
 InstallDir      "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${REG_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 SetCompressor   /SOLID lzma
 ShowInstDetails show
+
+; Installer file properties (credits)
+VIProductVersion "${PRODUCT_VERSION}.0"
+VIAddVersionKey "ProductName"     "${PRODUCT_NAME}"
+VIAddVersionKey "CompanyName"     "${PRODUCT_PUBLISHER}"
+VIAddVersionKey "LegalCopyright"  "Copyright (c) 2026 Cursed Entertainment. Created by Farica Kimora."
+VIAddVersionKey "FileDescription" "${PRODUCT_NAME} Setup"
+VIAddVersionKey "FileVersion"     "${PRODUCT_VERSION}"
 
 ; ── Pages ─────────────────────────────────────────────────────────────────────
 Page license
@@ -50,11 +48,11 @@ UninstPage instfiles
 LicenseData "..\LICENSE"
 
 ; ── File associations ─────────────────────────────────────────────────────────
-; Adds NovPlayer to each extension's "Open with" list without taking over the
+; Adds PulseAmp to each extension's "Open with" list without taking over the
 ; user's default app (Windows only lets the user change defaults).
 !macro AddOpenWith EXT
   WriteRegStr HKLM "Software\Classes\${EXT}\OpenWithProgids" "${PROG_ID}" ""
-  WriteRegStr HKLM "Software\Classes\Applications\NovPlayer.exe\SupportedTypes" "${EXT}" ""
+  WriteRegStr HKLM "Software\Classes\Applications\PulseAmp.exe\SupportedTypes" "${EXT}" ""
 !macroend
 
 !macro RemoveOpenWith EXT
@@ -77,39 +75,33 @@ LicenseData "..\LICENSE"
 !macroend
 
 ; ── Installer sections ────────────────────────────────────────────────────────
-Section "NovPlayer (required)" SEC_MAIN
+Section "PulseAmp (required)" SEC_MAIN
   SectionIn RO
   SetOutPath "$INSTDIR"
   SetShellVarContext all
 
-  ; Main executable
-  File "${APP_EXE}"
-
-  ; SDL2 runtime
-  File "${SDL2_DLL}"
-
-  ; FFmpeg DLLs (whatever version the app was built against)
-  File "${FFMPEG_DLLS_DIR}\*.dll"
+  ; Everything from the portable build
+  File /r "${DIST_DIR}\*.*"
 
   ; ── File associations ────────────────────────────────────────────────────────
-  WriteRegStr HKLM "Software\Classes\${PROG_ID}" "" "NovPlayer media file"
-  WriteRegStr HKLM "Software\Classes\${PROG_ID}\DefaultIcon" "" "$INSTDIR\NovPlayer.exe,0"
-  WriteRegStr HKLM "Software\Classes\${PROG_ID}\shell\open\command" "" '"$INSTDIR\NovPlayer.exe" "%1"'
-  WriteRegStr HKLM "Software\Classes\Applications\NovPlayer.exe\shell\open\command" "" '"$INSTDIR\NovPlayer.exe" "%1"'
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}" "" "PulseAmp media file"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\DefaultIcon" "" "$INSTDIR\PulseAmp.exe,0"
+  WriteRegStr HKLM "Software\Classes\${PROG_ID}\shell\open\command" "" '"$INSTDIR\PulseAmp.exe" "%1"'
+  WriteRegStr HKLM "Software\Classes\Applications\PulseAmp.exe\shell\open\command" "" '"$INSTDIR\PulseAmp.exe" "%1"'
   !insertmacro ForEachMediaExt AddOpenWith
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)' ; SHCNE_ASSOCCHANGED
 
   ; ── Shortcuts ────────────────────────────────────────────────────────────────
-  CreateDirectory "$SMPROGRAMS\NovPlayer"
-  CreateShortcut  "$SMPROGRAMS\NovPlayer\NovPlayer.lnk" \
-                  "$INSTDIR\NovPlayer.exe" "" "$INSTDIR\NovPlayer.exe" 0
-  CreateShortcut  "$DESKTOP\NovPlayer.lnk" \
-                  "$INSTDIR\NovPlayer.exe" "" "$INSTDIR\NovPlayer.exe" 0
+  CreateDirectory "$SMPROGRAMS\PulseAmp"
+  CreateShortcut  "$SMPROGRAMS\PulseAmp\PulseAmp.lnk" \
+                  "$INSTDIR\PulseAmp.exe" "" "$INSTDIR\PulseAmp.exe" 0
+  CreateShortcut  "$DESKTOP\PulseAmp.lnk" \
+                  "$INSTDIR\PulseAmp.exe" "" "$INSTDIR\PulseAmp.exe" 0
 
   ; ── Registry ─────────────────────────────────────────────────────────────────
   WriteRegStr   HKLM "${REG_KEY}" "DisplayName"    "${PRODUCT_NAME}"
   WriteRegStr   HKLM "${REG_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
-  WriteRegStr   HKLM "${REG_KEY}" "DisplayIcon"    "$INSTDIR\NovPlayer.exe"
+  WriteRegStr   HKLM "${REG_KEY}" "DisplayIcon"    "$INSTDIR\PulseAmp.exe"
   WriteRegStr   HKLM "${REG_KEY}" "Publisher"      "${PRODUCT_PUBLISHER}"
   WriteRegStr   HKLM "${REG_KEY}" "URLInfoAbout"   "${PRODUCT_URL}"
   WriteRegStr   HKLM "${REG_KEY}" "InstallLocation" "$INSTDIR"
@@ -135,21 +127,27 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext all
 
-  ; Remove files
-  Delete "$INSTDIR\NovPlayer.exe"
+  ; Remove what the installer put there (never the whole folder blindly)
+  Delete "$INSTDIR\PulseAmp.exe"
+  Delete "$INSTDIR\yt-dlp.exe"
   Delete "$INSTDIR\*.dll"
+  Delete "$INSTDIR\LICENSE.txt"
+  RMDir /r "$INSTDIR\presets"
+  RMDir /r "$INSTDIR\textures"
+  RMDir /r "$INSTDIR\skins"
+  RMDir /r "$INSTDIR\licenses"
   Delete "$INSTDIR\uninstall.exe"
   RMDir  "$INSTDIR"
 
   ; Shortcuts
-  Delete "$SMPROGRAMS\NovPlayer\NovPlayer.lnk"
-  RMDir  "$SMPROGRAMS\NovPlayer"
-  Delete "$DESKTOP\NovPlayer.lnk"
+  Delete "$SMPROGRAMS\PulseAmp\PulseAmp.lnk"
+  RMDir  "$SMPROGRAMS\PulseAmp"
+  Delete "$DESKTOP\PulseAmp.lnk"
 
   ; File associations
   !insertmacro ForEachMediaExt RemoveOpenWith
   DeleteRegKey HKLM "Software\Classes\${PROG_ID}"
-  DeleteRegKey HKLM "Software\Classes\Applications\NovPlayer.exe"
+  DeleteRegKey HKLM "Software\Classes\Applications\PulseAmp.exe"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 
   ; Registry

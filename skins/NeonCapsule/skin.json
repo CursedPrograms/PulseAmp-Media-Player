@@ -1,0 +1,50 @@
+{
+  // NeonCapsule: the window shape comes from background.png's transparency.
+  // See skins/README.md for the format.
+  "name": "NeonCapsule",
+  "author": "Farica Kimora / Cursed Entertainment",
+  "background": "background.png",
+  "accent": "#ff3cc8",
+
+  "controls": [
+    { "type": "visualizer", "mode": "current", "rect": [40, 24, 140, 92],
+      "background": "#00000066", "shape": "rounded", "radius": 12 },
+
+    { "type": "text", "content": "title", "rect": [196, 22, 224, 22], "scroll": true,
+      "font_size": 17, "color": "#f4e8ff" },
+    { "type": "text", "content": "time_total", "rect": [196, 46, 150, 16],
+      "font_size": 12, "color": "#9aa0ff" },
+    { "type": "text", "content": "bpm", "rect": [350, 46, 70, 16], "align": "right",
+      "font_size": 12, "color": "#ff7ad9" },
+
+    { "type": "button", "action": "menu",     "rect": [426, 22, 20, 20], "shape": "circle",
+      "color": "#8a7aa8", "color_hover": "#ffffff" },
+    { "type": "button", "action": "minimize", "rect": [448, 22, 20, 20], "shape": "circle",
+      "color": "#8a7aa8", "color_hover": "#ffffff" },
+    { "type": "button", "action": "close",    "rect": [470, 22, 20, 20], "shape": "circle",
+      "color": "#8a7aa8", "color_hover": "#ff5a6a" },
+
+    { "type": "slider", "action": "seek", "rect": [198, 72, 286, 5], "radius": 6,
+      "background": "#ffffff22", "fill": "#ff3cc8", "color": "#ffffff" },
+
+    { "type": "button", "action": "prev", "rect": [196, 88, 30, 30], "shape": "circle",
+      "color": "#d8ccff", "color_hover": "#ffffff", "background_hover": "#ffffff18" },
+    { "type": "toggle", "action": "playpause", "rect": [230, 84, 38, 38], "shape": "circle",
+      "background": "#ff3cc8", "background_hover": "#ff7ad9", "background_pressed": "#c01896",
+      "color": "#14081e" },
+    { "type": "button", "action": "stop", "rect": [272, 88, 30, 30], "shape": "circle",
+      "color": "#d8ccff", "color_hover": "#ffffff", "background_hover": "#ffffff18" },
+    { "type": "button", "action": "next", "rect": [306, 88, 30, 30], "shape": "circle",
+      "color": "#d8ccff", "color_hover": "#ffffff", "background_hover": "#ffffff18" },
+    { "type": "button", "action": "open", "rect": [340, 88, 30, 30], "shape": "circle",
+      "color": "#d8ccff", "color_hover": "#ffffff", "background_hover": "#ffffff18" },
+
+    { "type": "toggle", "action": "shuffle", "rect": [376, 90, 26, 26], "shape": "circle",
+      "color": "#6a5a88", "color_on": "#01dcff" },
+    { "type": "toggle", "action": "repeat",  "rect": [402, 90, 26, 26], "shape": "circle",
+      "color": "#6a5a88", "color_on": "#01dcff" },
+
+    { "type": "slider", "action": "volume", "rect": [434, 101, 50, 4], "radius": 5,
+      "background": "#ffffff18", "fill": "#01dcff", "color": "#e6f8ff" }
+  ]
+}

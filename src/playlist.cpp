@@ -1,5 +1,6 @@
 // ─── playlist.cpp ─────────────────────────────────────────────────────────────
 #include "playlist.h"
+#include "paths.h"
 #include <algorithm>
 #include <random>
 #include <fstream>
@@ -11,20 +12,7 @@
 namespace fs = std::filesystem;
 
 Playlist::Playlist() {
-    // Determine resume file location
-#ifdef _WIN32
-    const char* appdata = std::getenv("APPDATA");
-    resume_path_ = appdata ? std::string(appdata) + "\\NovPlayer\\resume.dat"
-                           : "resume.dat";
-#else
-    const char* home = std::getenv("HOME");
-    resume_path_ = home ? std::string(home) + "/.novplayer/resume.dat"
-                        : "resume.dat";
-#endif
-    // Create directory if needed
-    try {
-        fs::create_directories(fs::path(resume_path_).parent_path());
-    } catch (...) {}
+    resume_path_ = appDataPath("resume.dat");
     loadResume();
 }
 
@@ -35,6 +23,12 @@ void Playlist::addFile(const std::string& path, const std::string& title, double
     e.duration = dur;
     entries_.push_back(e);
     order_.push_back((int)order_.size());
+}
+
+void Playlist::setInfo(int idx, const std::string& title, double dur) {
+    if (idx < 0 || idx >= (int)entries_.size()) return;
+    if (!title.empty()) entries_[idx].title = title;
+    if (dur > 0) entries_[idx].duration = dur;
 }
 
 void Playlist::removeAt(int idx) {
@@ -51,11 +45,27 @@ void Playlist::clear() {
 }
 
 void Playlist::move(int from, int to) {
-    if (from == to) return;
-    auto it = entries_.begin();
+    const int n = (int)entries_.size();
+    if (from == to || from < 0 || to < 0 || from >= n || to >= n) return;
+    const int cur_entry = (current_ >= 0 && current_ < (int)order_.size()) ? order_[current_] : -1;
+
     PlaylistEntry e = entries_[from];
-    entries_.erase(it + from);
+    entries_.erase(entries_.begin() + from);
     entries_.insert(entries_.begin() + to, e);
+
+    // Where each old entry index ended up
+    auto remap = [&](int i) {
+        if (i == from) return to;
+        if (from < to && i > from && i <= to) return i - 1;
+        if (from > to && i >= to && i < from) return i + 1;
+        return i;
+    };
+    if (shuffle_) {
+        for (auto& o : order_) o = remap(o);          // same shuffled sequence
+    } else {
+        for (int i = 0; i < (int)order_.size(); ++i) order_[i] = i;
+        if (cur_entry >= 0) current_ = remap(cur_entry);  // keep playing the same track
+    }
 }
 
 const PlaylistEntry* Playlist::current() const {

@@ -2,7 +2,7 @@
 // ─── playlist.h ───────────────────────────────────────────────────────────────
 // Playlist with shuffle, repeat, and smart resume.
 // Smart resume: saves/restores playback position for every file ever played,
-// stored in a plain text file (~/.novplayer/resume.dat).
+// stored in a plain text file (~/.pulseamp/resume.dat).
 // ─────────────────────────────────────────────────────────────────────────────
 #include <string>
 #include <vector>
@@ -25,6 +25,7 @@ public:
     // ── Management ────────────────────────────────────────────────────────────
     void addFile(const std::string& path, const std::string& title = "", double dur = 0.0);
     void removeAt(int idx);
+    void setInfo(int idx, const std::string& title, double dur);
     void clear();
     void move(int from, int to);
 
@@ -33,6 +34,7 @@ public:
     const PlaylistEntry* next();
     const PlaylistEntry* prev();
     void setIndex(int i);
+    int  peekNextIndex() const { return nextIdx(); }  // what next() would pick, or -1
     int  getIndex()  const { return current_; }
     int  size()      const { return (int)entries_.size(); }
 

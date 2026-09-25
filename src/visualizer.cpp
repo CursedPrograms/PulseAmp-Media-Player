@@ -115,6 +115,7 @@ void Visualizer::render(ImDrawList* dl, ImVec2 origin, ImVec2 size, float bpm, d
         case Mode::RadialSpectrum:  drawRadialSpectrum(dl, origin, size, time); break;
         case Mode::BPMPulse:        drawBPMPulse      (dl, origin, size, bpm,  time); break;
         case Mode::ParticleStorm:   drawParticleStorm (dl, origin, size, time); break;
+        case Mode::MilkDrop:        break;   // rendered by projectM
     }
 }
 
@@ -171,7 +172,7 @@ void Visualizer::drawOscilloscope(ImDrawList* dl, ImVec2 o, ImVec2 sz, double /*
     }
 }
 
-// ─── Mode 2: Radial Spectrum (NovPlayer exclusive) ────────────────────────────
+// ─── Mode 2: Radial Spectrum (PulseAmp exclusive) ────────────────────────────
 void Visualizer::drawRadialSpectrum(ImDrawList* dl, ImVec2 o, ImVec2 sz, double t) {
     float cx = o.x + sz.x * 0.5f;
     float cy = o.y + sz.y * 0.5f;
@@ -214,7 +215,7 @@ void Visualizer::drawRadialSpectrum(ImDrawList* dl, ImVec2 o, ImVec2 sz, double 
                  (int)(100 + energy_*120)), 48);
 }
 
-// ─── Mode 3: BPM Pulse (NovPlayer exclusive) ──────────────────────────────────
+// ─── Mode 3: BPM Pulse (PulseAmp exclusive) ──────────────────────────────────
 void Visualizer::drawBPMPulse(ImDrawList* dl, ImVec2 o, ImVec2 sz, float bpm, double t) {
     float cx = o.x + sz.x*0.5f, cy = o.y + sz.y*0.5f;
     float maxR = std::min(sz.x, sz.y) * 0.48f;
@@ -257,7 +258,7 @@ void Visualizer::drawBPMPulse(ImDrawList* dl, ImVec2 o, ImVec2 sz, float bpm, do
     }
 }
 
-// ─── Mode 4: Particle Storm (NovPlayer exclusive) ─────────────────────────────
+// ─── Mode 4: Particle Storm (PulseAmp exclusive) ─────────────────────────────
 void Visualizer::drawParticleStorm(ImDrawList* dl, ImVec2 o, ImVec2 sz, double t) {
     std::uniform_real_distribution<float> posD(0.f, 1.f);
     std::uniform_real_distribution<float> velD(-0.01f, 0.01f);

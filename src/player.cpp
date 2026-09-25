@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 #include <algorithm>
+#include <mutex>
 
 // ─── AudioRingBuffer ──────────────────────────────────────────────────────────
 int AudioRingBuffer::write(const float* src, int count) {
@@ -84,30 +85,83 @@ Player::Player() = default;
 
 Player::~Player() { close(); }
 
-bool Player::open(const std::string& path) {
+// Open a file or URL (http options: reconnect, timeout, extra headers)
+static AVFormatContext* openInput(const std::string& url, const std::string& headers) {
+    AVDictionary* opts = nullptr;
+    if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
+        av_dict_set(&opts, "reconnect", "1", 0);
+        av_dict_set(&opts, "reconnect_streamed", "1", 0);
+        av_dict_set(&opts, "reconnect_delay_max", "5", 0);
+        av_dict_set(&opts, "rw_timeout", "15000000", 0); // 15 s (microseconds)
+        if (!headers.empty()) av_dict_set(&opts, "headers", headers.c_str(), 0);
+    }
+    AVFormatContext* ctx = nullptr;
+    int r = avformat_open_input(&ctx, url.c_str(), nullptr, &opts);
+    av_dict_free(&opts);
+    if (r < 0) return nullptr;
+    if (avformat_find_stream_info(ctx, nullptr) < 0) {
+        avformat_close_input(&ctx);
+        return nullptr;
+    }
+    return ctx;
+}
+
+PreparedMedia::~PreparedMedia() {
+    if (main)  avformat_close_input(&main);
+    if (audio) avformat_close_input(&audio);
+}
+
+std::unique_ptr<PreparedMedia> Player::prepare(const std::string& path, const OpenOptions& opt) {
+    static std::once_flag net_once;
+    std::call_once(net_once, [] { avformat_network_init(); });
+
+    auto pm = std::make_unique<PreparedMedia>();
+    pm->path = path;
+    pm->opt  = opt;
+    // Open the separate audio input in parallel (each open is several round trips)
+    std::thread audio_th;
+    if (!opt.audio_url.empty())
+        audio_th = std::thread([&] { pm->audio = openInput(opt.audio_url, opt.http_headers); });
+    pm->main = openInput(path, opt.http_headers);
+    if (audio_th.joinable()) audio_th.join();
+
+    if (!pm->main || (!opt.audio_url.empty() && !pm->audio)) {
+        std::cerr << "[Player] Cannot open: " << path << "\n";
+        return nullptr;
+    }
+    return pm;
+}
+
+bool Player::open(const std::string& path, const OpenOptions& opt) {
     close();
-    file_path_ = path;
+    return start(prepare(path, opt));
+}
+
+bool Player::start(std::unique_ptr<PreparedMedia> pm) {
+    close();
+    if (!pm || !pm->main) return false;
+    const OpenOptions& opt = pm->opt;
+    file_path_ = opt.source_id.empty() ? pm->path : opt.source_id;
     state_.store(PlayerState::Opening);
 
-    // Open input
-    fmt_ctx_ = avformat_alloc_context();
-    if (avformat_open_input(&fmt_ctx_, path.c_str(), nullptr, nullptr) < 0) {
-        std::cerr << "[Player] Cannot open: " << path << "\n";
-        state_.store(PlayerState::Stopped);
-        return false;
+    // Take ownership of the opened input(s)
+    fmt_ctx_ = pm->main;  pm->main = nullptr;
+    inputs_[0].ctx = fmt_ctx_;
+    n_inputs_  = 1;
+    audio_fmt_ = fmt_ctx_;
+    if (pm->audio) {
+        inputs_[1].ctx = pm->audio;  pm->audio = nullptr;
+        n_inputs_  = 2;
+        audio_fmt_ = inputs_[1].ctx;
     }
-    if (avformat_find_stream_info(fmt_ctx_, nullptr) < 0) {
-        avformat_close_input(&fmt_ctx_);
-        state_.store(PlayerState::Stopped);
-        return false;
-    }
-    duration_ = fmt_ctx_->duration > 0
-        ? (double)fmt_ctx_->duration / AV_TIME_BASE
-        : 0.0;
+    duration_ = 0.0;
+    for (int i = 0; i < n_inputs_; ++i)
+        if (inputs_[i].ctx->duration > 0)
+            duration_ = std::max(duration_, (double)inputs_[i].ctx->duration / AV_TIME_BASE);
 
     // Find streams
-    audio_stream_ = av_find_best_stream(fmt_ctx_, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
-    video_stream_ = av_find_best_stream(fmt_ctx_, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    audio_stream_ = av_find_best_stream(audio_fmt_, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    video_stream_ = av_find_best_stream(fmt_ctx_,   AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
 
     // Ignore embedded cover art (a single still "video" frame in audio files)
     if (video_stream_ >= 0 &&
@@ -116,7 +170,7 @@ bool Player::open(const std::string& path) {
 
     // ── Init audio decoder ────────────────────────────────────────────────────
     if (audio_stream_ >= 0) {
-        AVStream* st = fmt_ctx_->streams[audio_stream_];
+        AVStream* st = audio_fmt_->streams[audio_stream_];
         const AVCodec* codec = avcodec_find_decoder(st->codecpar->codec_id);
         if (codec) audio_ctx_ = avcodec_alloc_context3(codec);
         if (!audio_ctx_ ||
@@ -160,6 +214,12 @@ bool Player::open(const std::string& path) {
         }
     }
 
+    audio_tb_ = audio_stream_ >= 0 ? av_q2d(audio_fmt_->streams[audio_stream_]->time_base) : 0.0;
+    video_tb_ = video_stream_ >= 0 ? av_q2d(fmt_ctx_->streams[video_stream_]->time_base) : 0.0;
+    inputs_[0].feeds_video = video_stream_ >= 0;
+    inputs_[0].feeds_audio = audio_stream_ >= 0 && audio_fmt_ == fmt_ctx_;
+    if (n_inputs_ == 2) inputs_[1].feeds_audio = audio_stream_ >= 0;
+
     parseChapters();
     audio_ring_.reset();
 
@@ -167,7 +227,6 @@ bool Player::open(const std::string& path) {
     audio_clock_.store(0.0);
     wall_base_.store(0.0);
     wall_start_.store(nowSeconds());
-    eof_.store(false);
     audio_drained_.store(false);
     video_drained_.store(false);
     end_reported_.store(false);
@@ -175,7 +234,14 @@ bool Player::open(const std::string& path) {
     running_.store(true);
     state_.store(PlayerState::Playing);
 
-    demux_th_  = std::thread(&Player::demuxLoop,        this);
+    // Start in sync with the seek serial: only seeks requested from now on apply
+    seek_target_.store(0.0);
+    const int serial = seek_serial_.load();
+    for (int i = 0; i < n_inputs_; ++i) {
+        inputs_[i].seen_seek = serial;
+        inputs_[i].eof = false;
+        inputs_[i].th = std::thread(&Player::demuxLoop, this, i);
+    }
     audio_th_  = std::thread(&Player::audioDecodeLoop,  this);
     video_th_  = std::thread(&Player::videoDecodeLoop,  this);
     return true;
@@ -188,7 +254,8 @@ void Player::close() {
     video_pkt_cv_.notify_all();
     video_frame_cv_.notify_all();
 
-    if (demux_th_.joinable()) demux_th_.join();
+    for (auto& in : inputs_)
+        if (in.th.joinable()) in.th.join();
     if (audio_th_.joinable()) audio_th_.join();
     if (video_th_.joinable()) video_th_.join();
 
@@ -206,7 +273,13 @@ void Player::close() {
     if (sws_ctx_)   { sws_freeContext(sws_ctx_); sws_ctx_ = nullptr; }
     if (audio_ctx_) { avcodec_free_context(&audio_ctx_); }
     if (video_ctx_) { avcodec_free_context(&video_ctx_); }
-    if (fmt_ctx_)   { avformat_close_input(&fmt_ctx_); }
+    for (auto& in : inputs_) {
+        if (in.ctx) avformat_close_input(&in.ctx);
+        in.feeds_audio = in.feeds_video = false;
+        in.eof = false;
+    }
+    n_inputs_ = 0;
+    fmt_ctx_ = audio_fmt_ = nullptr;
 
     audio_stream_ = video_stream_ = -1;
     duration_ = 0.0;
@@ -237,7 +310,7 @@ void Player::seek(double seconds) {
     seconds = std::max(0.0, seconds);
     if (duration_ > 0.0) seconds = std::min(seconds, duration_);
     seek_target_.store(seconds);
-    seek_requested_.store(true);
+    seek_serial_.fetch_add(1);   // demux + decode threads pick this up
 }
 
 double Player::getCurrentTime() const {
@@ -258,7 +331,14 @@ double Player::getCurrentTime() const {
 }
 
 bool Player::pollEnded() {
-    if (!eof_.load() || end_reported_.load()) return false;
+    if (end_reported_.load() || n_inputs_ == 0) return false;
+
+    // With audio, the audio input decides; otherwise every input must be done
+    bool eof = true;
+    for (int i = 0; i < n_inputs_; ++i)
+        if (audio_stream_ < 0 || inputs_[i].feeds_audio)
+            eof = eof && inputs_[i].eof.load();
+    if (!eof) return false;
 
     bool audio_done = audio_stream_ < 0 ||
         (audio_drained_.load() && audio_ring_.available() == 0);
@@ -278,38 +358,43 @@ bool Player::pollEnded() {
 }
 
 // ─── Demux loop ───────────────────────────────────────────────────────────────
-void Player::demuxLoop() {
+void Player::demuxLoop(int idx) {
+    Input& in = inputs_[idx];
     AVPacket* pkt = av_packet_alloc();
     bool eof = false;
 
     while (running_.load()) {
-        // Handle seek
-        if (seek_requested_.exchange(false)) {
+        // Handle a new seek request
+        const int req = seek_serial_.load();
+        if (req != in.seen_seek) {
+            in.seen_seek = req;
             double t = seek_target_.load();
             int64_t ts = (int64_t)(t * AV_TIME_BASE);
-            av_seek_frame(fmt_ctx_, -1, ts, AVSEEK_FLAG_BACKWARD);
-
-            seek_serial_.fetch_add(1);
+            av_seek_frame(in.ctx, -1, ts, AVSEEK_FLAG_BACKWARD);
 
             // Drop queued packets and tell each decoder thread to flush itself
             // (decoders are only ever touched by their own thread)
-            { std::lock_guard lk(audio_pkt_mu_);
-              while (!audio_pkts_.empty()) { freePacket(audio_pkts_.front()); audio_pkts_.pop(); }
-              if (audio_ctx_) { audio_pkts_.push(flushPacket()); audio_pkt_cv_.notify_one(); } }
-            { std::lock_guard lk(video_pkt_mu_);
-              while (!video_pkts_.empty()) { freePacket(video_pkts_.front()); video_pkts_.pop(); }
-              if (video_ctx_) { video_pkts_.push(flushPacket()); video_pkt_cv_.notify_one(); } }
-            { std::lock_guard lk(video_frame_mu_);
-              while (!video_frames_.empty()) video_frames_.pop();
-              video_frame_cv_.notify_all(); }
+            if (in.feeds_audio) {
+                { std::lock_guard lk(audio_pkt_mu_);
+                  while (!audio_pkts_.empty()) { freePacket(audio_pkts_.front()); audio_pkts_.pop(); }
+                  audio_pkts_.push(flushPacket()); audio_pkt_cv_.notify_one(); }
+                audio_drained_.store(false);
+            }
+            if (in.feeds_video) {
+                { std::lock_guard lk(video_pkt_mu_);
+                  while (!video_pkts_.empty()) { freePacket(video_pkts_.front()); video_pkts_.pop(); }
+                  video_pkts_.push(flushPacket()); video_pkt_cv_.notify_one(); }
+                { std::lock_guard lk(video_frame_mu_);
+                  while (!video_frames_.empty()) video_frames_.pop();
+                  video_frame_cv_.notify_all(); }
+                video_drained_.store(false);
+            }
 
             audio_clock_.store(t);
             wall_base_.store(t);
             wall_start_.store(nowSeconds());
             eof = false;
-            eof_.store(false);
-            audio_drained_.store(false);
-            video_drained_.store(false);
+            in.eof.store(false);
             end_reported_.store(false);
         }
 
@@ -320,30 +405,30 @@ void Player::demuxLoop() {
         }
 
         // Back-pressure: don't over-buffer (and never drop packets)
-        bool full;
-        { std::lock_guard lk(audio_pkt_mu_); full = (int)audio_pkts_.size() >= MAX_AUDIO_PKTS; }
-        if (!full) { std::lock_guard lk(video_pkt_mu_); full = (int)video_pkts_.size() >= MAX_VIDEO_PKTS; }
+        bool full = false;
+        if (in.feeds_audio) { std::lock_guard lk(audio_pkt_mu_); full = (int)audio_pkts_.size() >= MAX_AUDIO_PKTS; }
+        if (!full && in.feeds_video) { std::lock_guard lk(video_pkt_mu_); full = (int)video_pkts_.size() >= MAX_VIDEO_PKTS; }
         if (full) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
 
-        int ret = av_read_frame(fmt_ctx_, pkt);
+        int ret = av_read_frame(in.ctx, pkt);
         if (ret < 0) {
-            if (ret == AVERROR_EOF || (fmt_ctx_->pb && avio_feof(fmt_ctx_->pb))) {
+            if (ret == AVERROR_EOF || (in.ctx->pb && avio_feof(in.ctx->pb))) {
                 eof = true;
                 // nullptr = drain the decoder
-                if (audio_ctx_) {
+                if (in.feeds_audio) {
                     std::lock_guard lk(audio_pkt_mu_);
                     audio_pkts_.push(nullptr);
                     audio_pkt_cv_.notify_one();
                 }
-                if (video_ctx_) {
+                if (in.feeds_video) {
                     std::lock_guard lk(video_pkt_mu_);
                     video_pkts_.push(nullptr);
                     video_pkt_cv_.notify_one();
                 }
-                eof_.store(true);
+                in.eof.store(true);
             } else {
                 // Transient read error: back off instead of spinning
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -351,13 +436,13 @@ void Player::demuxLoop() {
             continue;
         }
 
-        if (pkt->stream_index == audio_stream_ && audio_ctx_) {
+        if (in.feeds_audio && pkt->stream_index == audio_stream_) {
             AVPacket* p = av_packet_alloc();
             av_packet_move_ref(p, pkt);
             std::lock_guard lk(audio_pkt_mu_);
             audio_pkts_.push(p);
             audio_pkt_cv_.notify_one();
-        } else if (pkt->stream_index == video_stream_ && video_ctx_) {
+        } else if (in.feeds_video && pkt->stream_index == video_stream_) {
             AVPacket* p = av_packet_alloc();
             av_packet_move_ref(p, pkt);
             std::lock_guard lk(video_pkt_mu_);
@@ -373,8 +458,7 @@ void Player::demuxLoop() {
 void Player::audioDecodeLoop() {
     AVFrame* frame = av_frame_alloc();
     std::vector<float> resample_buf;
-    const double tb = audio_stream_ >= 0
-        ? av_q2d(fmt_ctx_->streams[audio_stream_]->time_base) : 0.0;
+    const double tb = audio_tb_;
     double skip_until = -1.0; // after a seek: drop audio before the target
 
     while (running_.load()) {
@@ -457,8 +541,7 @@ void Player::audioDecodeLoop() {
 // ─── Video decode loop ────────────────────────────────────────────────────────
 void Player::videoDecodeLoop() {
     AVFrame* frame = av_frame_alloc();
-    const double tb = video_stream_ >= 0
-        ? av_q2d(fmt_ctx_->streams[video_stream_]->time_base) : 0.0;
+    const double tb = video_tb_;
     double last_pts = 0.0;
 
     while (running_.load()) {

@@ -3,9 +3,9 @@
 // Five OpenGL/ImGui visualizer modes:
 //   0 – SpectrumBars   (classic Winamp)
 //   1 – Oscilloscope   (waveform trace)
-//   2 – RadialSpectrum (circular FFT — exclusive to NovPlayer)
-//   3 – BPMPulse       (beat-reactive ring burst — exclusive to NovPlayer)
-//   4 – ParticleStorm  (frequency-driven particle field — exclusive to NovPlayer)
+//   2 – RadialSpectrum (circular FFT — exclusive to PulseAmp)
+//   3 – BPMPulse       (beat-reactive ring burst — exclusive to PulseAmp)
+//   4 – ParticleStorm  (frequency-driven particle field — exclusive to PulseAmp)
 // ─────────────────────────────────────────────────────────────────────────────
 #include "player.h"
 #include <imgui.h>
@@ -29,7 +29,8 @@ struct VizParticle {
 
 class Visualizer {
 public:
-    enum class Mode { SpectrumBars, Oscilloscope, RadialSpectrum, BPMPulse, ParticleStorm };
+    // MilkDrop is drawn by the UI through projectM (see milkdrop.h), not here
+    enum class Mode { SpectrumBars, Oscilloscope, RadialSpectrum, BPMPulse, ParticleStorm, MilkDrop };
 
     Visualizer();
 
@@ -48,6 +49,13 @@ public:
 
     // Mood: analyzes frequency content, sets a "mood colour"
     ImU32 moodColor() const;
+
+    // Raw analysis for skins that draw their own visualizer (0..1 values)
+    const float* bars()     const { return bars_.data(); }
+    const float* barPeaks() const { return bars_peak_.data(); }
+    const float* wave()     const { return wave_buf_.data(); }   // mono, -1..1
+    static constexpr int barCount()  { return VIZ_BARS; }
+    static constexpr int waveCount() { return VIZ_FFT_SIZE; }
 
 private:
     // ── FFT helpers ────────────────────────────────────────────────────────────

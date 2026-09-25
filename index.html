@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PulseAmp Media Player</title>
+<meta name="description" content="PulseAmp: a free media player for Windows with YouTube and SoundCloud, MilkDrop visualizations and Winamp skins.">
+<meta property="og:title" content="PulseAmp Media Player">
+<meta property="og:description" content="YouTube & SoundCloud, MilkDrop visualizations, Winamp skins, themes. Free for Windows.">
+<meta property="og:image" content="https://cursedprograms.github.io/PulseAmp-Media-Player/assets/screenshots/milkdrop.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230e0e16'/%3E%3Cpath d='M8 34h10l5-14 8 28 7-22 5 8h13' fill='none' stroke='%2300ff8c' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#161624"/><path d="M8 34h10l5-14 8 28 7-22 5 8h13" fill="none" stroke="#00ff8c" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      PulseAmp
+    </a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#skins">Skins</a>
+      <a href="#start">Get started</a>
+      <a href="https://github.com/CursedPrograms/PulseAmp-Media-Player">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero" id="download">
+    <h1>PulseAmp</h1>
+    <p class="lead">A free media player for Windows with YouTube and SoundCloud, MilkDrop visualizations and real Winamp skins.</p>
+    <div class="downloads">
+      <a class="btn primary" href="dist/PulseAmp-Setup.exe" download>
+        <strong>Download installer</strong>
+        <span>PulseAmp-Setup.exe &middot; everything included</span>
+      </a>
+      <a class="btn" href="dist/PulseAmp-win64.zip" download>
+        <strong>Portable zip</strong>
+        <span>No install: extract and run PulseAmp.exe</span>
+      </a>
+      <a class="btn" href="dist/PulseAmp-milkdrop-presets.zip" download>
+        <strong>MilkDrop presets</strong>
+        <span>9,795 presets, for the portable zip</span>
+      </a>
+    </div>
+    <p class="meta">Version 1.0.0 &middot; Windows 10 / 11, 64-bit &middot; Free and open source (MIT)</p>
+    <p class="os-note" id="os-note" hidden>
+      These downloads are for Windows. On Linux or macOS you can
+      <a href="https://github.com/CursedPrograms/PulseAmp-Media-Player#build-instructions">build PulseAmp from source</a>.
+    </p>
+    <div class="hero-shot">
+      <img src="assets/screenshots/milkdrop.png" width="1280" height="720" alt="PulseAmp in fullscreen showing a MilkDrop visualization">
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>Everything a music player should do</h2>
+      <p class="sub">Plays your files, and whatever you find online, with visuals that react to the music.</p>
+      <div class="features">
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg>
+          <h3>YouTube &amp; SoundCloud</h3>
+          <p>Search and play from the Online tab, paste a link, or drag one in from your browser. YouTube plays with video up to 1080p.</p>
+        </div>
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>
+          <h3>MilkDrop visualizations</h3>
+          <p>Winamp's legendary visualizer through projectM, with nearly 10,000 presets. Switch presets with <kbd>[</kbd> and <kbd>]</kbd>.</p>
+        </div>
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7c0-2 2-3 4-3h8c2 0 4 1 4 3v10c0 2-2 3-4 3H8c-2 0-4-1-4-3z"/><path d="M8 9h8M8 13h5"/></svg>
+          <h3>Winamp skins</h3>
+          <p>Classic mode turns PulseAmp into a compact window in the shape of its skin. Load real Winamp <code>.wsz</code> skins, or design your own.</p>
+        </div>
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><circle cx="12" cy="16" r="3"/></svg>
+          <h3>Themes</h3>
+          <p>Eight colour themes, from Winamp green to a light classic look, plus a live theme editor to make and save your own.</p>
+        </div>
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h3l3-7 4 14 3-9 2 2h3"/></svg>
+          <h3>Waveform, BPM &amp; resume</h3>
+          <p>Seek on the track's waveform, see the live BPM, and pick up every file where you left off.</p>
+        </div>
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <h3>Fullscreen &amp; scaling</h3>
+          <p>Double-click for fullscreen; the controls fade away. The interface scales with the window and looks sharp on high-DPI screens.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="skins">
+    <div class="wrap">
+      <h2>Skins, in any shape</h2>
+      <p class="sub">Press <kbd>Ctrl</kbd>+<kbd>M</kbd> for Classic mode. PulseAmp ships with two skins of its own and plays classic Winamp skins too: thousands are free at <a href="https://skins.webamp.org/">skins.webamp.org</a>.</p>
+      <div class="skins">
+        <figure>
+          <div class="round-shot"><img src="assets/screenshots/orb.png" width="720" height="720" alt="The round PulseOrb skin"></div>
+          <figcaption>PulseOrb</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/screenshots/capsule.png" width="1040" height="280" alt="The pill-shaped NeonCapsule skin with a MilkDrop visualization"  class="capsule-shot">
+          <figcaption>NeonCapsule &middot; make your own with a simple <a href="https://github.com/CursedPrograms/PulseAmp-Media-Player/blob/main/skins/README.md">skin.json</a></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="gallery">
+    <div class="wrap">
+      <h2>A closer look</h2>
+      <div class="gallery">
+        <figure>
+          <div class="shot"><img src="assets/screenshots/main.png" width="1280" height="780" alt="Searching YouTube in the Online tab with MilkDrop running" loading="lazy"></div>
+          <figcaption>Search YouTube and SoundCloud while MilkDrop plays</figcaption>
+        </figure>
+        <figure>
+          <div class="shot"><img src="assets/screenshots/themes.png" width="1280" height="780" alt="The Vaporwave theme and the theme editor" loading="lazy"></div>
+          <figcaption>The Vaporwave theme and the theme editor</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="wrap">
+      <h2>Get started</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>Install</h3>
+          <p>Run <b>PulseAmp-Setup.exe</b>, or extract the portable zip anywhere. For MilkDrop in the portable version, also extract the presets zip into the PulseAmp folder.</p>
+        </div>
+        <div class="step">
+          <h3>Play something</h3>
+          <p>Drag files, folders or links onto the window or the playlist, press <kbd>O</kbd> to open a file, or search the Online tab.</p>
+        </div>
+        <div class="step">
+          <h3>Make it yours</h3>
+          <p>Try MilkDrop from the visualizer button, <kbd>Ctrl</kbd>+<kbd>M</kbd> for skins, and View &rarr; Theme for colours.</p>
+        </div>
+      </div>
+      <p class="note">PulseAmp isn't code-signed yet, so Windows may show "Windows protected your PC" the first time: choose <b>More info &rarr; Run anyway</b>. If YouTube or SoundCloud stop working, click <b>Update yt-dlp</b> in the Online tab.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap credits">
+    <div>
+      <strong>PulseAmp</strong> was created by <strong>Farica Kimora</strong>.<br>
+      &copy; 2026 Cursed Entertainment
+    </div>
+    <div class="links">
+      <a href="https://github.com/CursedPrograms/PulseAmp-Media-Player">Source code</a>
+      <a href="https://cursed-entertainment.itch.io/">itch.io</a>
+      <a href="https://ko-fi.com/cursedentertainment">Ko-fi</a>
+      <a href="https://x.com/NorowaretaGemu">X</a>
+    </div>
+  </div>
+  <div class="wrap thanks">
+    Built with FFmpeg, SDL2, Dear ImGui, projectM, GLEW, miniz and yt-dlp. MilkDrop presets: "Cream of the Crop", curated by ISOSCELES.
+  </div>
+</footer>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

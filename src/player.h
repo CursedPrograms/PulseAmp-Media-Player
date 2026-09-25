@@ -76,6 +76,26 @@ private:
     std::atomic<bool>   discard_{ false };
 };
 
+// ─── Open options ─────────────────────────────────────────────────────────────
+struct OpenOptions {
+    std::string audio_url;     // separate audio input (e.g. YouTube video + audio streams)
+    std::string http_headers;  // "Name: value\r\n..." sent with http(s) requests
+    std::string source_id;     // what getFilePath() reports (page URL for online media)
+};
+
+// Inputs opened ahead of time (network I/O done). Created by Player::prepare()
+// on any thread, then handed to Player::start() on the main thread.
+struct PreparedMedia {
+    std::string      path;
+    OpenOptions      opt;
+    AVFormatContext* main  = nullptr;
+    AVFormatContext* audio = nullptr;   // only with opt.audio_url
+    PreparedMedia() = default;
+    PreparedMedia(const PreparedMedia&) = delete;
+    PreparedMedia& operator=(const PreparedMedia&) = delete;
+    ~PreparedMedia();
+};
+
 // ─── Player ───────────────────────────────────────────────────────────────────
 class Player {
 public:
@@ -87,7 +107,11 @@ public:
     Player& operator=(const Player&) = delete;
 
     // ── Playback control ──────────────────────────────────────────────────────
-    bool        open(const std::string& path);
+    bool        open(const std::string& path, const OpenOptions& opt = {});
+    // open() in two steps, so slow (network) opens can run off the UI thread:
+    static std::unique_ptr<PreparedMedia> prepare(const std::string& path,
+                                                  const OpenOptions& opt = {});
+    bool        start(std::unique_ptr<PreparedMedia> media);
     void        close();
     void        play();
     void        pause();
@@ -124,7 +148,7 @@ public:
     bool pollEnded();
 
 private:
-    void demuxLoop();
+    void demuxLoop(int input);
     void audioDecodeLoop();
     void videoDecodeLoop();
     void parseChapters();
@@ -138,7 +162,20 @@ private:
     static double    nowSeconds();
 
     // ── FFmpeg state ──────────────────────────────────────────────────────────
-    AVFormatContext*  fmt_ctx_   = nullptr;
+    // One or two inputs, each read by its own demux thread
+    struct Input {
+        AVFormatContext*  ctx = nullptr;
+        bool              feeds_audio = false, feeds_video = false;
+        int               seen_seek = 0;       // last seek request handled
+        std::atomic<bool> eof{ false };        // this input reached end of file
+        std::thread       th;
+    };
+    Input             inputs_[2];
+    int               n_inputs_  = 0;
+    AVFormatContext*  fmt_ctx_   = nullptr;   // primary input (video, chapters)
+    AVFormatContext*  audio_fmt_ = nullptr;   // input holding the audio stream
+    double            audio_tb_  = 0.0;       // stream time bases in seconds
+    double            video_tb_  = 0.0;
     AVCodecContext*   audio_ctx_ = nullptr;
     AVCodecContext*   video_ctx_ = nullptr;
     SwrContext*       swr_ctx_   = nullptr;
@@ -154,9 +191,8 @@ private:
     std::atomic<PlayerState> state_{ PlayerState::Stopped };
     std::atomic<float>       volume_{ 1.0f };
     std::atomic<bool>        muted_{ false };
-    std::atomic<bool>        seek_requested_{ false };
     std::atomic<double>      seek_target_{ 0.0 };
-    std::atomic<int>         seek_serial_{ 0 };   // bumped on every seek
+    std::atomic<int>         seek_serial_{ 0 };   // bumped on every seek request
     std::atomic<bool>        running_{ false };
 
     // ── Clock ─────────────────────────────────────────────────────────────────
@@ -168,7 +204,6 @@ private:
     std::atomic<double>      wall_start_{ 0.0 };
 
     // ── End-of-file tracking ──────────────────────────────────────────────────
-    std::atomic<bool>        eof_{ false };         // demuxer hit end of file
     std::atomic<bool>        audio_drained_{ false };
     std::atomic<bool>        video_drained_{ false };
     std::atomic<bool>        end_reported_{ false };
@@ -191,7 +226,7 @@ private:
     AudioRingBuffer audio_ring_;
 
     // ── Threads ───────────────────────────────────────────────────────────────
-    std::thread demux_th_, audio_th_, video_th_;
+    std::thread audio_th_, video_th_;
 
     std::vector<Chapter>      chapters_;
     std::string               file_path_;

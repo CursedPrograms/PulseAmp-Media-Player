@@ -1,12 +1,10 @@
-# Build output
+# Build output (CMake build folders: object files, not the release)
 build/
 out/
 .vs/
-*.exe
-*.dll
 
-# Installer output
+# Releases in dist/ (the zips and installer) ARE committed: the GitHub Pages
+# site links to them. The unpacked folder and the download cache are not.
+dist/.cache/
+dist/PulseAmp/
 installer/*.exe
-
-# Portable builds
-dist/

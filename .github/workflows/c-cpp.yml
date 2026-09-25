@@ -31,5 +31,5 @@ jobs:
     - name: Upload binary
       uses: actions/upload-artifact@v4
       with:
-        name: NovPlayer-linux-x64
-        path: build/NovPlayer
+        name: PulseAmp-linux-x64
+        path: build/PulseAmp
