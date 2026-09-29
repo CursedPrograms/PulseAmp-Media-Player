@@ -7,11 +7,21 @@
   </a>
 </div>
 
-![PulseAmp](assets/promo/banner.jpg)
+<br>
+<p align="center">
+  <img src="assets/logo/logo00.png" alt="PulseAmp" width="300">
+</p>
+<br>
 
 # PulseAmp (media_player)
 
 A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video and audio playback, YouTube and SoundCloud, MilkDrop visualizations, Winamp skins, real-time BPM detection, a waveform seek bar, smart resume, a stereo widener and a built-in format converter.
+
+<br>
+<p align="center">
+  <img src="assets/promo/banner.jpg" alt="PulseAmp" width="300">
+</p>
+<br>
 
 ## Download
 
@@ -24,13 +34,19 @@ A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video 
 
 ![PulseAmp in fullscreen with a MilkDrop visualization](assets/screenshots/milkdrop.png)
 
+**MidnightNeon**, a full player skin: playlist with cover art, now playing, visualizer and equalizer
+
+![The MidnightNeon skin: playlist with cover art, now playing card, neon visualizer and equalizer](assets/screenshots/midnightneon.jpg)
+
 | YouTube search + MilkDrop | Vaporwave theme + theme editor |
 |---|---|
 | ![Searching YouTube in the Online tab while MilkDrop plays](assets/screenshots/main.png) | ![The Vaporwave theme with the theme editor open](assets/screenshots/themes.png) |
+| **Right-click the visualizer** | **Neon arcade: Invaders** |
+| ![The visualizer menu: modes, MilkDrop presets, automatic or manual preset changes](assets/screenshots/vizmenu.png) | ![Invaders in the Games menu, played over the visualizer](assets/screenshots/games.png) |
 | **Settings panel** | **About window** |
-| ![The Settings tab: playback, visualizer, MilkDrop, spatial audio, skins and themes](assets/screenshots/settings.png) | ![The About PulseAmp window](assets/screenshots/about.png) |
+| ![The Settings tab: playback, visualizer, MilkDrop, equalizer, spatial audio and skins](assets/screenshots/settings.png) | ![The About PulseAmp window](assets/screenshots/about.png) |
 
-**Classic mode skins:** PulseOrb (round) and NeonCapsule (shaped from its PNG)
+**Classic mode skins:** PulseOrb (round) and NeonCapsule (shaped from its PNG), plus MidnightNeon above
 
 <p align="center">
   <img src="assets/screenshots/orb.png" alt="The round PulseOrb skin" width="300">
@@ -41,10 +57,32 @@ A modern C++17 media player built on FFmpeg, SDL2, OpenGL and Dear ImGui: video 
 ## Highlights
 
 - **YouTube & SoundCloud:** search and play from the **Online** tab, paste a link, or drag one in from your browser. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) (bundled with the Windows build; "Update yt-dlp" in the Online tab keeps it working). YouTube plays with video up to 1080p, or audio only.
-- **MilkDrop visualizer:** the classic Winamp visualizer through [projectM](https://github.com/projectM-visualizer/projectm), with the 9,795-preset "Cream of the Crop" pack. Switch presets with `[` / `]`.
+- **MilkDrop visualizer:** the classic Winamp visualizer through [projectM](https://github.com/projectM-visualizer/projectm), with the 9,795-preset "Cream of the Crop" pack. Switch presets with `[` / `]`, or **right-click the visualizer** to pick one from the list, choose a visualizer, and set presets to change automatically or only when you say so.
 - **Classic mode & skins:** `Ctrl+M` turns PulseAmp into a compact window in the shape of its skin. Load real **Winamp 2.x `.wsz` skins** (thousands at [skins.webamp.org](https://skins.webamp.org/)) or PulseAmp skins you can design yourself. See [skins/README.md](skins/README.md).
+- **Neon arcade:** **Games** in the menu bar turns the player into a neon arcade with Snake, Runner and Invaders, played over the visualizer while the music keeps going: Runner obstacles land on the beat and Invaders march to it. Or play over the **video**: pick **Games → Backdrop → Video** (or Auto) to keep a movie running behind the game, with a slider for how much it's dimmed. Make your own with `.pag` game files, see [games/README.md](games/README.md).
 - **Themes:** 8 built-in colour themes plus a live **Theme Editor** to make and save your own.
 - **Scales with the window:** text and controls grow and shrink with the window and adapt to high-DPI screens. **Double-click** the video or visualizer for fullscreen; the controls hide after a few seconds.
+
+## Adding visualizations and skins
+
+Your own folder is `%APPDATA%\PulseAmp` on Windows (paste that into Explorer's address bar) and `~/.pulseamp` on Linux and macOS. Files there survive PulseAmp updates. The folders next to `PulseAmp.exe` work too.
+
+### MilkDrop presets
+
+1. Get presets: MilkDrop preset files end in **`.milk`**. Good sources are the [projectM preset collections](https://github.com/projectM-visualizer/presets-cream-of-the-crop) and the thousands shared on forums and archives for Winamp's MilkDrop 2.
+2. Copy the `.milk` files, or whole folders of them, into **`presets`** in your folder (`%APPDATA%\PulseAmp\presets`; right-click the visualizer → **Open presets folder** takes you there). Each folder shows up as a category in the preset list.
+3. Some presets use images: put those in **`textures`** next to `presets`.
+4. In PulseAmp: right-click the visualizer → **Rescan presets** (or restart), then **Presets** in the same menu, and pick one.
+
+The Windows installer already includes the 9,795-preset "Cream of the Crop" pack. With the portable zip, extract `PulseAmp-milkdrop-presets.zip` into the PulseAmp folder to get it.
+
+### Winamp skins
+
+1. Download a classic **Winamp 2.x skin** (a `.wsz` file). [skins.webamp.org](https://skins.webamp.org/) has tens of thousands; click one and use its download button. (Winamp 3/5 "modern" `.wal` skins aren't supported.)
+2. Copy the `.wsz` into **`skins`** in your folder (`%APPDATA%\PulseAmp\skins`; **View → Skins → Open skins folder** takes you there). Don't unzip it: PulseAmp reads it as is.
+3. In PulseAmp: **View → Skins** and pick it; PulseAmp switches to Classic mode (`Ctrl+M` switches back). Or use **Settings → Load skin file...** to open a `.wsz` from anywhere.
+
+PulseAmp's own skins (`skin.json` plus images, in a folder or a `.zip`/`.paskin`) go in the same `skins` folder. [skins/README.md](skins/README.md) explains how to make one.
 
 ## Build Instructions
 
@@ -167,6 +205,21 @@ cmake --build build -j4
 
 MinGW builds link the GCC runtime statically, so `PulseAmp.exe` only needs `SDL2.dll` and the FFmpeg DLLs next to it (add `-DPULSEAMP_BUNDLE_FFMPEG=ON -DFFMPEG_BIN_DIR=<ffmpeg bin folder>` to copy them automatically).
 
+**Standalone MinGW (e.g. WinLibs, without MSYS2):** download the SDL2 `SDL2-devel-*-mingw.zip` and a shared FFmpeg build (e.g. [BtbN's](https://github.com/BtbN/FFmpeg-Builds/releases) `win64-lgpl-shared`), then:
+
+```powershell
+$sdl = "D:/deps/SDL2-2.32.10/x86_64-w64-mingw32"
+$ff  = "D:/deps/ffmpeg-n8.1-latest-win64-lgpl-shared-8.1"
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+  -DSDL2_DIR="$sdl/../cmake" -DCMAKE_PREFIX_PATH="$ff;$sdl" `
+  -DCMAKE_CXX_FLAGS="-I$sdl/include" -DCMAKE_C_FLAGS="-I$sdl/include" `
+  -DPULSEAMP_BUNDLE_FFMPEG=ON -DFFMPEG_BIN_DIR="$ff/bin" `
+  -DCMAKE_TLS_CAINFO="C:/Program Files/Git/mingw64/etc/ssl/certs/ca-bundle.crt"
+cmake --build build
+```
+
+The extra `-I` is needed because the code includes `<SDL2/SDL.h>` and the SDL2 package only adds `include/SDL2`. `CMAKE_TLS_CAINFO` is only needed if downloads fail with "SSL peer certificate … not OK" (WinLibs' CMake ships without CA certificates; Git's bundle works).
+
 ---
 
 ## CMake Options
@@ -191,14 +244,21 @@ media_player/
 ├── src/
 │   ├── main.cpp            ← Entry point, SDL2+GL window, UI scaling, main loop
 │   ├── player.{h,cpp}      ← FFmpeg decode pipeline (1-2 inputs, demux + audio/video threads)
-│   ├── audio_output.{h,cpp}← SDL2 audio device (volume, pause, stereo widener)
+│   ├── audio_output.{h,cpp}← SDL2 audio device (volume up to 200%, stereo widener, EQ)
+│   ├── equalizer.{h,cpp}   ← 10-band equalizer + presets
 │   ├── video_renderer.{h,cpp}← OpenGL RGBA texture upload
-│   ├── visualizer.{h,cpp}  ← 5 built-in visualizer modes with FFT
+│   ├── visualizer.{h,cpp}  ← 6 built-in visualizer modes with FFT
 │   ├── milkdrop.{h,cpp}    ← MilkDrop via projectM
 │   ├── online.{h,cpp}      ← YouTube / SoundCloud via yt-dlp
 │   ├── skin.{h,cpp}        ← Winamp .wsz + PulseAmp skin loading
 │   ├── skin_window.{h,cpp} ← Shaped windows
 │   ├── ui_skin.cpp         ← Classic mode (skinned window)
+│   ├── ui_skin_pulse.cpp   ← PulseAmp skin controls (lists, EQ, search, cover art)
+│   ├── skin_draw.{h,cpp}   ← Neon drawing helpers, vector icons
+│   ├── media_cache.{h,cpp} ← Cover art + tag cache
+│   ├── games.{h,cpp}       ← Neon arcade (Snake, Runner, Invaders) + .pag loader
+│   ├── logos.{h,cpp}       ← Logos built into the exe
+│   ├── single_instance.{h,cpp}← Files opened in Explorer go to the running window
 │   ├── theme_manager.{h,cpp}← Colour themes + theme editor storage
 │   ├── fonts.{h,cpp}       ← Font atlas (symbols, CJK on demand)
 │   ├── ui_manager.{h,cpp}  ← Full ImGui interface
@@ -209,6 +269,8 @@ media_player/
 │   ├── waveform.{h,cpp}    ← Async full-file waveform generator
 │   ├── json.{h,cpp}, paths.{h,cpp}, screenshot.{h,cpp}
 ├── skins/                  ← Bundled skins + skin format docs
+├── games/                  ← Example .pag games + game format docs
+├── assets/logo/            ← Logos (also embedded in the exe)
 ├── scripts/package-windows.ps1 ← Portable zip / installer packaging
 └── installer/
     └── setup.nsi           ← NSIS Windows installer script
@@ -234,7 +296,7 @@ The bundled FFmpeg from vcpkg/apt/brew covers H.264, H.265/HEVC, VP8, VP9, AV1, 
 |---|---|
 | `Space` | Play / Pause |
 | `←` / `→` | Seek ±5 seconds |
-| `↑` / `↓` | Volume ±5% |
+| `↑` / `↓` / mouse wheel | Volume ±5% (up to 200%) |
 | `M` | Toggle mute |
 | `N` / `P` | Next / Previous track |
 | `O` | Open file |
@@ -243,6 +305,7 @@ The bundled FFmpeg from vcpkg/apt/brew covers H.264, H.265/HEVC, VP8, VP9, AV1, 
 | `F` / double-click | Toggle fullscreen |
 | `Ctrl+M` | Classic mode (skins) |
 | `[` / `]` | Previous / next MilkDrop preset |
+| Right-click visualizer | Visualizer menu: modes, MilkDrop presets, auto / manual preset changes |
 | `Esc` | Leave fullscreen / classic mode, otherwise quit |
 
 ---
@@ -273,6 +336,7 @@ Make your own with **View → Theme → Theme Editor**; custom themes are saved 
 | **Radial Spectrum** | Rotating circular FFT ring | ✅ PulseAmp exclusive |
 | **BPM Pulse** | Beat-reactive expanding rings + spectrum border | ✅ PulseAmp exclusive |
 | **Particle Storm** | Frequency-driven particle field | ✅ PulseAmp exclusive |
+| **Neon Wave** | Glowing waveform over pink-to-cyan LED bars | ✅ PulseAmp exclusive |
 | **MilkDrop** | Winamp's MilkDrop through projectM, thousands of presets | — |
 
 ---
@@ -287,7 +351,9 @@ Make your own with **View → Theme → Theme Editor**; custom themes are saved 
 
 3. **Smart Resume** — Every file's playback position is saved to  
    `~/.pulseamp/resume.dat` (Linux/macOS) or `%APPDATA%\PulseAmp\resume.dat` (Windows).  
-   Next time you open the same file, it picks up exactly where you left off.
+   Next time you open the same file, it picks up exactly where you left off, with a  
+   **Start over** button for a few seconds if you'd rather begin again. Turn it off in  
+   **Settings → Playback → Smart Resume** to always start from the beginning.
 
 4. **Mood-Adaptive Color** — Optional mode that analyzes the live frequency balance  
    (bass/mid/treble ratio) and continuously shifts the visualizer accent color  
@@ -296,8 +362,12 @@ Make your own with **View → Theme → Theme Editor**; custom themes are saved 
 5. **Spatial Audio / Stereo Widener** — Haas-effect cross-feed filter that expands  
    the stereo field for headphone listening.  Width is adjustable from 0× (mono) to 2× (extreme).
 
-6. **Radial Spectrum + BPM Pulse + Particle Storm visualizers** —  
-   Three completely original visualization modes found nowhere else.
+6. **Radial Spectrum + BPM Pulse + Particle Storm + Neon Wave visualizers** —  
+   Four original visualization modes found nowhere else.
+
+7. **Neon arcade** — Snake, Runner and Invaders in the Games menu, played over the  
+   visualizer or a playing video (watch a movie while you play) and moving to the music;  
+   make your own levels with `.pag` game files.
 
 ---
 
@@ -331,6 +401,12 @@ YouTube and SoundCloud playback goes through yt-dlp; their terms of service don'
 `PulseAmp --screenshot out.png [--size 1280x780] [--frames 30] [--show about|themes|settings|online|milkdrop|fullscreen|skin:<path>|search:<query>]` renders the UI offscreen and saves a PNG. Set `PULSEAMP_DATA_DIR` to use a separate settings folder.
 
 ---
+
+<br>
+<p align="center">
+  <img src="assets/logo/logo02.png" alt="PulseAmp" width="300">
+</p>
+<br>
 
 <div align="center">© Cursed Entertainment 2026</div>
 <br>

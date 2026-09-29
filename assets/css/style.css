@@ -33,7 +33,7 @@ header {
 }
 .nav { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; color: var(--text); text-decoration: none; }
-.brand svg { width: 30px; height: 30px; }
+.brand img { width: 30px; height: 30px; }
 .nav nav { display: flex; gap: 22px; }
 .nav nav a { color: var(--dim); text-decoration: none; font-size: 15px; }
 .nav nav a:hover,
@@ -98,6 +98,8 @@ section p.sub { color: var(--dim); margin: 0 0 32px; max-width: 720px; }
 
 .skins { display: grid; grid-template-columns: 1fr 1.6fr; gap: 24px; align-items: center; }
 .skins figure { margin: 0; }
+.skin-wide { margin: 0 0 28px; }
+.skin-wide figcaption { color: var(--dim); font-size: 14px; margin-top: 10px; text-align: center; }
 .skins figcaption { color: var(--dim); font-size: 14px; margin-top: 10px; text-align: center; }
 .shot { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); background: var(--bg-2); }
 .round-shot { border-radius: 50%; overflow: hidden; max-width: 340px; margin: 0 auto; }
@@ -109,6 +111,7 @@ section p.sub { color: var(--dim); margin: 0 0 32px; max-width: 720px; }
 
 .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; counter-reset: step; }
 .step { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.step code { overflow-wrap: anywhere; }
 .step::before {
   counter-increment: step; content: counter(step);
   display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;

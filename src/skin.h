@@ -22,7 +22,8 @@ struct SkinImage {
 
 // One element of a PulseAmp skin (see skins/README.md for the format)
 struct SkinControl {
-    std::string type;            // button | toggle | slider | text | visualizer | image
+    std::string type;            // button | toggle | slider | text | visualizer | image |
+                                 // panel | list | art | search | eq | switch | combo
     std::string action;          // play, pause, playpause, stop, next, prev, open, menu,
                                  // close, minimize, fullwindow, mute, shuffle, repeat,
                                  // fullscreen, seek, volume, preset_next, preset_prev
@@ -41,8 +42,35 @@ struct SkinControl {
     std::string align = "left";  // left | center | right
     bool  scroll = false;        // text: marquee when too long
     bool  vertical = false;      // slider direction
-    std::string viz_mode;        // visualizer: current | spectrum | oscilloscope | radial | bpm | particles | milkdrop
+    std::string viz_mode;        // visualizer: current | spectrum | oscilloscope | radial | bpm | particles | neon | milkdrop
+    bool  video = true;          // visualizer: show the video instead while one plays
+
+    // Neon look
+    ImU32 border = 0, border_on = 0;   // outline colour (off / on)
+    float border_width = 1.5f;
+    ImU32 glow = 0;                    // glow colour (0 = none)
+    float glow_size = 10.f;
+    bool  underline = false;           // toggle: underline when on (tab style)
+
+    // Pages: shown only on these skin pages (empty = always)
+    std::vector<std::string> pages;
+
+    // list: playlist | library | online | favorites | left (follows list:* buttons)
+    std::string source;
+    float row_height = 60.f;
+    ImU32 color2 = 0;                  // secondary text (artist, duration, labels)
+
+    std::string hint;                  // search: placeholder text
 };
+
+// Decode a BMP / PNG / JPEG / WebP image from memory into RGBA
+bool decodeImageData(const uint8_t* data, size_t size, SkinImage& out);
+
+// swscale into a tightly packed dst_w x dst_h RGBA buffer, safely (swscale may
+// write past a row's end: never give it an exact-size buffer)
+struct SwsContext;
+bool swsToRGBA(SwsContext* sws, const uint8_t* const src[], const int src_ls[], int src_h,
+               int dst_w, int dst_h, std::vector<uint8_t>& out);
 
 class Skin {
 public:
@@ -71,6 +99,8 @@ public:
     std::string shape = "rect";                // rect | rounded | circle | image
     float       corner_radius = 16.f;
     ImU32       accent = IM_COL32(0, 255, 140, 255);
+    std::string start_page = "now";           // first page shown
+    float       default_zoom = 0.f;           // 0 = keep the current zoom
 
     void uploadTextures();   // GL context must be current
     void freeTextures();

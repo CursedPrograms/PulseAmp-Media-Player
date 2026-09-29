@@ -115,6 +115,7 @@ void Visualizer::render(ImDrawList* dl, ImVec2 origin, ImVec2 size, float bpm, d
         case Mode::RadialSpectrum:  drawRadialSpectrum(dl, origin, size, time); break;
         case Mode::BPMPulse:        drawBPMPulse      (dl, origin, size, bpm,  time); break;
         case Mode::ParticleStorm:   drawParticleStorm (dl, origin, size, time); break;
+        case Mode::NeonWave:        drawNeonWave      (dl, origin, size, time); break;
         case Mode::MilkDrop:        break;   // rendered by projectM
     }
 }
@@ -144,6 +145,60 @@ void Visualizer::drawSpectrumBars(ImDrawList* dl, ImVec2 o, ImVec2 sz, double /*
         float ph = bars_peak_[b] * sz.y;
         float py = o.y + sz.y - ph - 2.f;
         dl->AddRectFilled({x0, py}, {x1, py+2.f}, IM_COL32(255,255,255,180));
+    }
+}
+
+// ─── Neon Wave: segmented bars in a pink -> cyan -> green gradient under a
+// glowing wave ─────────────────────────────────────────────────────────────────
+static ImU32 neonGradient(float t, int alpha = 255) {
+    // 0 pink, 0.5 cyan, 1 green
+    const float p[3] = {255, 60, 200}, c[3] = {1, 220, 255}, g[3] = {0, 255, 140};
+    const float* a = t < 0.5f ? p : c;
+    const float* b = t < 0.5f ? c : g;
+    float k = t < 0.5f ? t * 2.f : (t - 0.5f) * 2.f;
+    return IM_COL32((int)(a[0] + (b[0] - a[0]) * k), (int)(a[1] + (b[1] - a[1]) * k),
+                    (int)(a[2] + (b[2] - a[2]) * k), alpha);
+}
+
+void Visualizer::drawNeonWave(ImDrawList* dl, ImVec2 o, ImVec2 sz, double t) {
+    // Segmented bars (bottom 70%)
+    const int   nbars = 44;
+    const float gap = std::max(1.f, sz.x / nbars * 0.18f);
+    const float bw = sz.x / nbars;
+    const float seg_h = std::max(2.f, sz.y / 30.f), seg_gap = std::max(1.f, seg_h * 0.35f);
+    const float bars_h = sz.y * 0.72f;
+    for (int i = 0; i < nbars; ++i) {
+        int b0 = i * VIZ_BARS / nbars, b1 = std::max(b0 + 1, (i + 1) * VIZ_BARS / nbars);
+        float v = 0.f;
+        for (int b = b0; b < b1; ++b) v = std::max(v, bars_[b]);
+        const float h = v * bars_h;
+        const int segs = (int)(h / (seg_h + seg_gap));
+        const ImU32 col = neonGradient((float)i / (nbars - 1));
+        const float x0 = o.x + i * bw + gap * 0.5f, x1 = o.x + (i + 1) * bw - gap * 0.5f;
+        for (int s = 0; s < segs; ++s) {
+            float y1 = o.y + sz.y - s * (seg_h + seg_gap);
+            dl->AddRectFilled({x0, y1 - seg_h}, {x1, y1}, col, seg_h * 0.25f);
+        }
+    }
+
+    // Wave: smoothed waveform, drawn as glow layers then a bright core
+    const int pts = 96;
+    std::vector<ImVec2> wave(pts);
+    const float mid = o.y + sz.y * 0.36f, amp = sz.y * 0.28f;
+    for (int i = 0; i < pts; ++i) {
+        float acc = 0.f;
+        const int span = VIZ_FFT_SIZE / pts;
+        for (int k = 0; k < span; ++k) acc += wave_buf_[std::min(VIZ_FFT_SIZE - 1, i * span + k)];
+        float s = acc / span;
+        // Slow travelling sine keeps the line alive in quiet passages
+        s = s * 3.5f + 0.25f * (0.35f + energy_) * std::sin((float)t * 1.7f + i * 0.13f);
+        wave[i] = {o.x + sz.x * i / (pts - 1), mid - std::clamp(s, -1.f, 1.f) * amp};
+    }
+    for (int layer = 3; layer >= 0; --layer) {
+        const float w = layer == 0 ? std::max(1.5f, sz.y / 90.f) : sz.y / 90.f * (1.f + layer * 2.2f);
+        const int alpha = layer == 0 ? 255 : 40 / layer;
+        for (int i = 0; i + 1 < pts; ++i)
+            dl->AddLine(wave[i], wave[i + 1], neonGradient((float)i / (pts - 1) * 0.55f, alpha), w);
     }
 }
 

@@ -10,6 +10,7 @@ namespace {
 std::mutex         mu;
 std::set<ImWchar>  cjk_chars;   // CJK / wide characters seen so far
 bool               dirty = false;
+ImFont*            g_large = nullptr;    // big text (skins)
 
 // Wide scripts that live in the CJK fallback font
 bool isCjk(unsigned cp) {
@@ -100,6 +101,7 @@ void Fonts::build(float scale) {
                                 "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf" };
 #endif
 
+    g_large = nullptr;
     const float px = std::round(15.f * scale);
     if (!exists(main_font) || !io.Fonts->AddFontFromFileTTF(main_font, px, nullptr, main_ranges)) {
         ImFontConfig cfg;
@@ -108,14 +110,25 @@ void Fonts::build(float scale) {
         return;
     }
 
-    ImFontConfig merge;
-    merge.MergeMode = true;
-    if (exists(sym_font))
-        io.Fonts->AddFontFromFileTTF(sym_font, px, &merge, symbol_ranges);
-    if (cjk_ranges.Size > 1)
-        for (const char* f : cjk_fonts)
-            if (exists(f)) {
-                io.Fonts->AddFontFromFileTTF(f, px, &merge, cjk_ranges.Data);
-                break;
-            }
+    // Main font + fallbacks merged into it; then the same at a large size
+    auto addMerges = [&](float size) {
+        ImFontConfig merge;
+        merge.MergeMode = true;
+        if (exists(sym_font))
+            io.Fonts->AddFontFromFileTTF(sym_font, size, &merge, symbol_ranges);
+        if (cjk_ranges.Size > 1)
+            for (const char* f : cjk_fonts)
+                if (exists(f)) {
+                    io.Fonts->AddFontFromFileTTF(f, size, &merge, cjk_ranges.Data);
+                    break;
+                }
+    };
+    addMerges(px);
+    const float big = std::round(15.f * 2.4f * scale);
+    g_large = io.Fonts->AddFontFromFileTTF(main_font, big, nullptr, main_ranges);
+    if (g_large) addMerges(big);
+}
+
+ImFont* Fonts::large() {
+    return g_large ? g_large : ImGui::GetIO().Fonts->Fonts.Size ? ImGui::GetIO().Fonts->Fonts[0] : nullptr;
 }

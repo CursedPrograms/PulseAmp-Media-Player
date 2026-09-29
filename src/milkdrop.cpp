@@ -31,6 +31,7 @@ bool MilkDrop::compiledIn() {
 // ─── Stub (built without projectM) ────────────────────────────────────────────
 MilkDrop::~MilkDrop() = default;
 bool MilkDrop::init() { error_ = "This build of PulseAmp has no MilkDrop support"; return false; }
+void MilkDrop::shutdown() {}
 void MilkDrop::feed(const AudioRingBuffer&, float, int, bool) {}
 void MilkDrop::renderToTexture(int, int) {}
 int  MilkDrop::presetCount() const { return 0; }
@@ -38,20 +39,26 @@ std::string MilkDrop::presetName() const { return {}; }
 void MilkDrop::next() {}
 void MilkDrop::previous() {}
 void MilkDrop::random() {}
-void MilkDrop::setShuffle(bool) {}
-void MilkDrop::setLocked(bool) {}
-void MilkDrop::setDuration(double) {}
+void MilkDrop::setShuffle(bool on)   { shuffle_ = on; }
+void MilkDrop::setLocked(bool on)    { locked_ = on; }
+void MilkDrop::setDuration(double s) { duration_ = s; }
 void MilkDrop::rescanPresets() {}
+int  MilkDrop::position() const { return -1; }
+void MilkDrop::select(int) {}
 
 #else
 // ─── projectM ─────────────────────────────────────────────────────────────────
 #define PM  static_cast<projectm_handle>(handle_)
 #define PL  static_cast<projectm_playlist_handle>(playlist_)
 
-MilkDrop::~MilkDrop() {
+MilkDrop::~MilkDrop() { shutdown(); }
+
+void MilkDrop::shutdown() {
     if (playlist_) projectm_playlist_destroy(PL);
     if (handle_)   projectm_destroy(PM);
     if (tex_)      glDeleteTextures(1, &tex_);
+    playlist_ = handle_ = nullptr;
+    tex_ = 0;
 }
 
 bool MilkDrop::init() {
@@ -72,7 +79,8 @@ bool MilkDrop::init() {
         error_ = "projectM could not start (needs OpenGL 3.3)";
         return false;
     }
-    projectm_set_preset_duration(PM, 30.0);
+    projectm_set_preset_duration(PM, duration_);
+    projectm_set_preset_locked(PM, locked_);
     projectm_set_soft_cut_duration(PM, 3.0);
 
     // Textures some presets use
@@ -84,7 +92,7 @@ bool MilkDrop::init() {
     projectm_set_texture_search_paths(PM, tex_ptrs.data(), tex_ptrs.size());
 
     playlist_ = projectm_playlist_create(PM);
-    projectm_playlist_set_shuffle(PL, true);
+    projectm_playlist_set_shuffle(PL, shuffle_);
     rescanPresets();
     return true;
 }
@@ -99,6 +107,26 @@ void MilkDrop::rescanPresets() {
     for (auto& d : dirs_)
         if (fs::is_directory(d, ec))
             projectm_playlist_add_path(PL, d.c_str(), true, false);
+
+    // Sorted by path, so each folder (category) stays together in the preset list
+    const uint32_t n = projectm_playlist_size(PL);
+    projectm_playlist_sort(PL, 0, n, SORT_PREDICATE_FULL_PATH, SORT_ORDER_ASCENDING);
+    presets_.clear();
+    if (char** items = projectm_playlist_items(PL, 0, n)) {
+        for (char** it = items; *it; ++it) {
+            fs::path p = fs::u8path(*it);
+            Preset pr;
+            pr.name = p.stem().u8string();
+            // Category: the folder it's in, unless that is a preset folder itself
+            const fs::path parent = p.parent_path().lexically_normal();
+            bool top = false;
+            for (auto& d : dirs_) top = top || parent == fs::u8path(d).lexically_normal();
+            if (!top) pr.category = parent.filename().u8string();
+            presets_.push_back(std::move(pr));
+        }
+        projectm_playlist_free_string_array(items);
+    }
+
     if (projectm_playlist_size(PL) > 0)
         projectm_playlist_play_next(PL, true);
     else
@@ -159,8 +187,16 @@ void MilkDrop::previous() { if (presetCount()) projectm_playlist_play_previous(P
 void MilkDrop::random() {
     if (int n = presetCount()) projectm_playlist_set_position(PL, (uint32_t)(std::rand() % n), false);
 }
-void MilkDrop::setShuffle(bool on)       { if (playlist_) projectm_playlist_set_shuffle(PL, on); }
-void MilkDrop::setLocked(bool on)        { if (handle_) projectm_set_preset_locked(PM, on); }
-void MilkDrop::setDuration(double s)     { if (handle_) projectm_set_preset_duration(PM, s); }
+void MilkDrop::setShuffle(bool on)   { shuffle_ = on;  if (playlist_) projectm_playlist_set_shuffle(PL, on); }
+void MilkDrop::setLocked(bool on)    { locked_ = on;   if (handle_) projectm_set_preset_locked(PM, on); }
+void MilkDrop::setDuration(double s) { duration_ = s;  if (handle_) projectm_set_preset_duration(PM, s); }
+
+int MilkDrop::position() const {
+    return presetCount() ? (int)projectm_playlist_get_position(PL) : -1;
+}
+
+void MilkDrop::select(int index) {
+    if (index >= 0 && index < presetCount()) projectm_playlist_set_position(PL, (uint32_t)index, false);
+}
 
 #endif

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <algorithm>
 #include <mutex>
+#include <cctype>
 
 // ─── AudioRingBuffer ──────────────────────────────────────────────────────────
 int AudioRingBuffer::write(const float* src, int count) {
@@ -221,6 +222,7 @@ bool Player::start(std::unique_ptr<PreparedMedia> pm) {
     if (n_inputs_ == 2) inputs_[1].feeds_audio = audio_stream_ >= 0;
 
     parseChapters();
+    readMediaInfo();
     audio_ring_.reset();
 
     // Reset clock and end-of-file state
@@ -290,6 +292,7 @@ void Player::close() {
 
 void Player::play() {
     if (state_.load() == PlayerState::Paused) {
+        if (end_reported_.load()) seek(0.0);   // finished: play it again from the start
         wall_start_.store(nowSeconds());
         state_.store(PlayerState::Playing);
     }
@@ -328,6 +331,12 @@ double Player::getCurrentTime() const {
     }
     if (duration_ > 0.0) t = std::min(t, duration_);
     return std::max(0.0, t);
+}
+
+double Player::resumePosition() const {
+    const double t = getCurrentTime();
+    if (end_reported_.load() || (duration_ > 0.0 && t > duration_ - 5.0)) return 0.0;
+    return t;
 }
 
 bool Player::pollEnded() {
@@ -404,10 +413,21 @@ void Player::demuxLoop(int idx) {
             continue;
         }
 
-        // Back-pressure: don't over-buffer (and never drop packets)
+        // Back-pressure: don't over-buffer (and never drop packets). While the
+        // audio of this input runs low, the video queue may grow further, so a
+        // slow video decoder can't starve the sound.
         bool full = false;
-        if (in.feeds_audio) { std::lock_guard lk(audio_pkt_mu_); full = (int)audio_pkts_.size() >= MAX_AUDIO_PKTS; }
-        if (!full && in.feeds_video) { std::lock_guard lk(video_pkt_mu_); full = (int)video_pkts_.size() >= MAX_VIDEO_PKTS; }
+        int audio_queued = MAX_AUDIO_PKTS;
+        if (in.feeds_audio) {
+            std::lock_guard lk(audio_pkt_mu_);
+            audio_queued = (int)audio_pkts_.size();
+            full = audio_queued >= MAX_AUDIO_PKTS;
+        }
+        if (!full && in.feeds_video) {
+            std::lock_guard lk(video_pkt_mu_);
+            const int limit = audio_queued < MAX_AUDIO_PKTS / 4 ? MAX_VIDEO_PKTS * 8 : MAX_VIDEO_PKTS;
+            full = (int)video_pkts_.size() >= limit;
+        }
         if (full) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
@@ -543,6 +563,7 @@ void Player::videoDecodeLoop() {
     AVFrame* frame = av_frame_alloc();
     const double tb = video_tb_;
     double last_pts = 0.0;
+    double skip_until = -1.0; // after a seek: drop frames before the target
 
     while (running_.load()) {
         // Throttle: wait until there is room in the frame queue
@@ -567,6 +588,7 @@ void Player::videoDecodeLoop() {
 
         if (pkt == flushPacket()) {
             avcodec_flush_buffers(video_ctx_);
+            skip_until = seek_target_.load();
             std::lock_guard lk(video_frame_mu_);
             while (!video_frames_.empty()) video_frames_.pop();
             continue;
@@ -581,6 +603,16 @@ void Player::videoDecodeLoop() {
             int ret = avcodec_receive_frame(video_ctx_, frame);
             if (ret < 0) break; // EAGAIN, EOF or error
 
+            if (frame->best_effort_timestamp != AV_NOPTS_VALUE)
+                last_pts = frame->best_effort_timestamp * tb;
+
+            // Seeking lands on the keyframe before the target: decode up to the
+            // target without showing those frames (else they play as a fast-forward)
+            if (last_pts < skip_until - 0.1) {
+                av_frame_unref(frame);
+                continue;
+            }
+
             // (Re)create the scaler for this frame's size/format
             sws_ctx_ = sws_getCachedContext(sws_ctx_,
                 frame->width, frame->height, (AVPixelFormat)frame->format,
@@ -592,13 +624,12 @@ void Player::videoDecodeLoop() {
             auto vf = std::make_shared<VideoFrame>();
             vf->width  = frame->width;
             vf->height = frame->height;
-            vf->rgba.resize((size_t)frame->width * frame->height * 4);
-            if (frame->best_effort_timestamp != AV_NOPTS_VALUE)
-                last_pts = frame->best_effort_timestamp * tb;
+            vf->stride = FFALIGN(frame->width * 4, 64);
+            vf->rgba.resize((size_t)vf->stride * (frame->height + 1));   // + a spare row
             vf->pts = last_pts;
 
             uint8_t* dst[4] = { vf->rgba.data(), nullptr, nullptr, nullptr };
-            int      ls[4]  = { frame->width * 4, 0, 0, 0 };
+            int      ls[4]  = { vf->stride, 0, 0, 0 };
             sws_scale(sws_ctx_,
                 (const uint8_t* const*)frame->data, frame->linesize,
                 0, frame->height, dst, ls);
@@ -613,6 +644,50 @@ void Player::videoDecodeLoop() {
         if (drain && serial == seek_serial_.load()) video_drained_.store(true);
     }
     av_frame_free(&frame);
+}
+
+// ─── Tags, format, cover art ──────────────────────────────────────────────────
+void Player::readMediaInfo() {
+    info_ = MediaInfo{};
+    auto tag = [&](const char* key) -> std::string {
+        for (int i = 0; i < n_inputs_; ++i) {
+            AVFormatContext* c = inputs_[i].ctx;
+            if (AVDictionaryEntry* e = av_dict_get(c->metadata, key, nullptr, 0)) return e->value;
+            for (unsigned s = 0; s < c->nb_streams; ++s)   // e.g. Ogg/Opus keep tags per stream
+                if (AVDictionaryEntry* e = av_dict_get(c->streams[s]->metadata, key, nullptr, 0)) return e->value;
+        }
+        return {};
+    };
+    info_.title  = tag("title");
+    info_.artist = tag("artist");
+    if (info_.artist.empty()) info_.artist = tag("album_artist");
+    info_.album  = tag("album");
+
+    if (audio_ctx_) {
+        std::string c = avcodec_get_name(audio_ctx_->codec_id);
+        if (c.rfind("pcm_", 0) == 0) c = "PCM";
+        for (auto& ch : c) ch = (char)std::toupper((unsigned char)ch);
+        info_.codec = c;
+        info_.sample_rate = audio_ctx_->sample_rate;
+        if (audio_ctx_->bits_per_raw_sample > 0) info_.bits = audio_ctx_->bits_per_raw_sample;
+        else if (!av_sample_fmt_is_planar(audio_ctx_->sample_fmt) || info_.codec == "PCM")
+            info_.bits = av_get_bytes_per_sample(audio_ctx_->sample_fmt) * 8;
+        const AVStream* st = audio_fmt_->streams[audio_stream_];
+        int64_t br = st->codecpar->bit_rate > 0 ? st->codecpar->bit_rate : audio_fmt_->bit_rate;
+        info_.bitrate_kbps = (int)(br / 1000);
+        if (info_.codec != "PCM" && info_.codec != "FLAC" && info_.codec != "ALAC" && info_.codec != "WAVPACK")
+            info_.bits = 0;   // lossy: bit depth isn't meaningful
+    }
+
+    // Cover art is stored as an "attached picture" stream
+    for (int i = 0; i < n_inputs_ && info_.art.empty(); ++i)
+        for (unsigned s = 0; s < inputs_[i].ctx->nb_streams; ++s) {
+            const AVStream* st = inputs_[i].ctx->streams[s];
+            if ((st->disposition & AV_DISPOSITION_ATTACHED_PIC) && st->attached_pic.size > 0) {
+                info_.art.assign(st->attached_pic.data, st->attached_pic.data + st->attached_pic.size);
+                break;
+            }
+        }
 }
 
 // ─── Chapters ─────────────────────────────────────────────────────────────────

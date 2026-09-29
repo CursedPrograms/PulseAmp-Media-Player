@@ -20,6 +20,11 @@
 #include "online.h"
 #include "milkdrop.h"
 #include "skin.h"
+#include "equalizer.h"
+#include "media_cache.h"
+#include "games.h"
+#include <atomic>
+#include <thread>
 #include <imgui.h>
 #include <SDL2/SDL.h>
 #include <string>
@@ -46,6 +51,11 @@ public:
     bool skinMode() const { return skin_mode_; }
     void toggleSkinMode();
     bool loadSkin(const std::string& path);
+
+    Equalizer& equalizer() { return eq_; }
+
+    // Free GL resources while the GL context still exists (call before shutdown)
+    void releaseGL();
 
     // UI scale factor (window size / DPI); sizes in the layout are multiplied by it
     void  setScale(float s);
@@ -88,6 +98,7 @@ private:
     bool skinToggleOn(const std::string& action) const;
     std::string skinText(const std::string& what, const std::string& custom) const;
     void applySkinWindow();
+    float skinFitZoom(float fraction) const;   // zoom filling that part of the screen
     void setSkinZoom(float z);
     void openSkinFile();
     std::vector<std::string> findSkins() const;
@@ -96,18 +107,40 @@ private:
     // Settings (<appdata>/settings.ini)
     void loadSettings();
     void saveSettings() const;
+
+    // Modern skin controls (ui_skin_pulse.cpp)
+    void drawSkinTrackList(const SkinControl& c, int idx, ImVec2 p0, ImVec2 p1);
+    void drawSkinEq(const SkinControl& c, int idx, ImVec2 p0, ImVec2 p1);
+    void drawSkinSearch(const SkinControl& c, int idx, ImVec2 p0, ImVec2 p1);
+    void drawSkinCombo(const SkinControl& c, int idx, ImVec2 p0, ImVec2 p1);
+    const MediaCache::Info* currentArt();
+
+    // Favorites / library
+    bool isFavorite(const std::string& path) const;
+    void toggleFavorite(const PlaylistEntry& e);
+    void loadFavorites();
+    void saveFavorites() const;
+    void startLibraryScan();
+    const PlaylistEntry* currentEntry() const { return playlist_.current(); }
+
+    // Equalizer section of the settings tab
+    void drawEqualizerSettings();
     void playOnline(const std::string& url, const std::string& title, double dur);
     void onOpened(const PlaylistEntry* pe);   // after the player opened pe
     void pollBackgroundWork();                // online searches / stream opens
     void drawInfoOverlay(double time);   // floating metadata overlay
+    void drawResumePrompt(float x, float y, float h);         // "Resumed at … · Start over"
     void drawAboutWindow();              // Help > About (credits)
     void drawThemeList(bool as_menu);
     void openThemeEditor();
     void drawThemeEditor();
     float S(float px) const { return px * ui_scale_; } // scale a pixel size
-    int   vizModeCount() const { return MilkDrop::compiledIn() ? 6 : 5; }
+    int   vizModeCount() const { return MilkDrop::compiledIn() ? 7 : 6; }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    static bool containsNoCase(const std::string& hay, const std::string& needle);
+    void setVolume(float v);             // 0..Player::MAX_VOLUME
+    void togglePlay();                   // pause / resume, or start the playlist when stopped
     void openFile();
     void openFolder();
     std::string formatTime(double s) const;
@@ -169,9 +202,30 @@ private:
 
     // MilkDrop (projectM)
     MilkDrop     milkdrop_;
+    Arcade       arcade_;        // Games menu (full window only)
+    int          game_bg_        = 0;      // game backdrop: 0 auto (video if any), 1 visualizer, 2 video
+    float        game_video_dim_ = 0.45f;  // how much a video backdrop is darkened, 0..0.95
     float        milkdrop_w_ = 0.f, milkdrop_h_ = 0.f;   // panel size this frame (UI units)
     bool         md_shuffle_ = true, md_locked_ = false;
     float        md_duration_ = 30.f;
+
+    // Equalizer, cover art / tag cache, favorites, library
+    Equalizer    eq_;
+    MediaCache   media_;
+    std::vector<PlaylistEntry> favorites_;
+    std::vector<PlaylistEntry> library_;
+    std::thread  library_th_;
+    std::atomic<bool> library_scanning_{ false };
+    bool         library_started_ = false;
+    std::mutex   library_mu_;
+    std::vector<PlaylistEntry> library_pending_;
+    bool         library_pending_ready_ = false;
+
+    // Modern skin state
+    std::string  skin_page_ = "now";         // page shown (tabs: page:NAME)
+    std::string  skin_list_ = "playlist";    // source of "left" lists (list:NAME)
+    char         skin_search_[256] {};
+    float        skin_prev_zoom_ = 0.f;      // before "maximize"
 
     // Classic mode
     std::unique_ptr<Skin> skin_;
@@ -237,6 +291,24 @@ private:
 
     // Settings
     bool         smart_resume_   = true;
+    double       resumed_at_     = 0.0;   // position a file was resumed at (0 = started fresh)
+    double       resume_shown_   = -1.0;  // ImGui time the "Start over" button appeared
     bool         auto_advance_   = true;
     float        viz_height_pct_ = 0.25f; // fraction of window height
+    float        sidebar_w_      = 340.f; // sidebar width (unscaled px), dragged at its edge
+
+    // Visualizer right-click menu (panel and skins): modes, MilkDrop options and presets
+    void drawVizMenu();
+    void setMilkDropAuto(bool on);        // auto: presets change on their own; manual: they stay
+    char md_filter_[64] = {};             // preset search in that menu
+    int  dev_viz_menu_ = 0;               // --show vizmenu (screenshots): frames until it opens
+    bool dev_viz_menu_center_ = false;    // ...and it opens centred
+
+    // Games: the game fills the video / visualizer area, over the dimmed
+    // visualizer or the playing video (game_bg_)
+    void drawGame(float x, float y, float w, float h, double time);
+    void drawGamesMenu();
+
+    // A draggable divider between panels; returns the mouse movement while dragged
+    float splitter(const char* id, float x, float y, float w, float h, bool vertical);
 };

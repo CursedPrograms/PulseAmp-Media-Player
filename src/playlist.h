@@ -13,6 +13,8 @@ struct PlaylistEntry {
     std::string path;
     std::string title;   // extracted from metadata or filename
     double      duration = 0.0;
+    std::string artist;  // online entries (local files: read from tags by MediaCache)
+    std::string art;     // thumbnail URL for online entries
 };
 
 enum class RepeatMode { None, One, All };
@@ -24,8 +26,9 @@ public:
 
     // ── Management ────────────────────────────────────────────────────────────
     void addFile(const std::string& path, const std::string& title = "", double dur = 0.0);
+    void addEntry(const PlaylistEntry& e);
     void removeAt(int idx);
-    void setInfo(int idx, const std::string& title, double dur);
+    void setInfo(int idx, const std::string& title, double dur, const std::string& artist = "");
     void clear();
     void move(int from, int to);
 

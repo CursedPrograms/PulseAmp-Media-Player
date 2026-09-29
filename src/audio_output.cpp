@@ -1,5 +1,6 @@
 // ─── audio_output.cpp ─────────────────────────────────────────────────────────
 #include "audio_output.h"
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 
@@ -50,8 +51,12 @@ void AudioOutput::sdlCallback(void* userdata, Uint8* stream, int len) {
 
     if (self->spatial_ && self->channels_ == 2)
         self->spatial_->process(dst, count / 2, self->spatial_width_.load());
+    if (self->eq_ && self->channels_ == 2)
+        self->eq_->process(dst, count / 2);
 
     float gain = self->gain_.load();
-    if (gain != 1.0f)
+    if (gain > 1.0f)        // boosted: clip instead of overflowing the output range
+        for (int i = 0; i < count; ++i) dst[i] = std::clamp(dst[i] * gain, -1.f, 1.f);
+    else if (gain != 1.0f)
         for (int i = 0; i < count; ++i) dst[i] *= gain;
 }

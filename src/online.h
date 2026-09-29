@@ -21,6 +21,7 @@ struct OnlineResult {             // one search hit
     std::string title;
     std::string uploader;
     double      duration = 0.0;
+    std::string thumbnail;        // image URL (may be empty)
 };
 
 struct ResolvedStream {           // ready to hand to the player
@@ -28,12 +29,16 @@ struct ResolvedStream {           // ready to hand to the player
     std::string stream_url;       // video+audio, video only, or audio only
     std::string audio_url;        // separate audio stream (YouTube video), else empty
     std::string title;
+    std::string uploader;
+    std::string thumbnail;
     std::string http_headers;     // "Name: value\r\n..." for FFmpeg's http protocol
     double      duration = 0.0;
 };
 
 // True for http(s) URLs of sites that need yt-dlp (vs. direct media URLs)
 bool isOnlinePageUrl(const std::string& s);
+// Thumbnail for a YouTube watch URL (derived from the video id), else ""
+std::string youtubeThumbnail(const std::string& url);
 bool isUrl(const std::string& s);
 
 class OnlineService {

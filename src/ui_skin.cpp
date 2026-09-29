@@ -6,6 +6,7 @@
 #include "skin_window.h"
 #include "fonts.h"
 #include "paths.h"
+#include "skin_draw.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -42,65 +43,6 @@ bool winampGlyph(unsigned char c, int& col, int& row) {
     return false;
 }
 
-// Simple vector icons for PulseAmp skins without images
-void drawIcon(ImDrawList* dl, const std::string& icon, ImVec2 c, float s, ImU32 col) {
-    auto P = [&](float x, float y) { return ImVec2(c.x + x * s, c.y + y * s); };
-    const float t = std::max(1.f, s * 0.18f);
-    if (icon == "play") {
-        dl->AddTriangleFilled(P(-0.55f, -0.7f), P(-0.55f, 0.7f), P(0.75f, 0.f), col);
-    } else if (icon == "pause") {
-        dl->AddRectFilled(P(-0.6f, -0.7f), P(-0.15f, 0.7f), col, s * 0.08f);
-        dl->AddRectFilled(P(0.15f, -0.7f), P(0.6f, 0.7f), col, s * 0.08f);
-    } else if (icon == "stop") {
-        dl->AddRectFilled(P(-0.6f, -0.6f), P(0.6f, 0.6f), col, s * 0.1f);
-    } else if (icon == "next") {
-        dl->AddTriangleFilled(P(-0.7f, -0.65f), P(-0.7f, 0.65f), P(0.35f, 0.f), col);
-        dl->AddRectFilled(P(0.4f, -0.65f), P(0.65f, 0.65f), col);
-    } else if (icon == "prev") {
-        dl->AddTriangleFilled(P(0.7f, -0.65f), P(0.7f, 0.65f), P(-0.35f, 0.f), col);
-        dl->AddRectFilled(P(-0.65f, -0.65f), P(-0.4f, 0.65f), col);
-    } else if (icon == "open" || icon == "eject") {
-        dl->AddTriangleFilled(P(-0.7f, 0.15f), P(0.7f, 0.15f), P(0.f, -0.7f), col);
-        dl->AddRectFilled(P(-0.7f, 0.35f), P(0.7f, 0.6f), col);
-    } else if (icon == "close") {
-        dl->AddLine(P(-0.55f, -0.55f), P(0.55f, 0.55f), col, t);
-        dl->AddLine(P(0.55f, -0.55f), P(-0.55f, 0.55f), col, t);
-    } else if (icon == "minimize") {
-        dl->AddLine(P(-0.55f, 0.45f), P(0.55f, 0.45f), col, t);
-    } else if (icon == "menu") {
-        for (float y : { -0.45f, 0.f, 0.45f }) dl->AddLine(P(-0.6f, y), P(0.6f, y), col, t);
-    } else if (icon == "fullwindow") {
-        dl->AddRect(P(-0.6f, -0.5f), P(0.6f, 0.5f), col, 0.f, 0, t);
-        dl->AddLine(P(-0.6f, -0.25f), P(0.6f, -0.25f), col, t);
-    } else if (icon == "fullscreen") {
-        for (int sx : { -1, 1 }) for (int sy : { -1, 1 }) {
-            dl->AddLine(P(sx * 0.65f, sy * 0.65f), P(sx * 0.25f, sy * 0.65f), col, t);
-            dl->AddLine(P(sx * 0.65f, sy * 0.65f), P(sx * 0.65f, sy * 0.25f), col, t);
-        }
-    } else if (icon == "mute" || icon == "volume") {
-        dl->AddRectFilled(P(-0.7f, -0.25f), P(-0.35f, 0.25f), col);
-        dl->AddTriangleFilled(P(-0.45f, 0.f), P(0.05f, -0.65f), P(0.05f, 0.65f), col);
-        if (icon == "mute") {
-            dl->AddLine(P(0.25f, -0.3f), P(0.75f, 0.3f), col, t);
-            dl->AddLine(P(0.75f, -0.3f), P(0.25f, 0.3f), col, t);
-        } else {
-            dl->PathArcTo(P(0.05f, 0.f), s * 0.45f, -0.9f, 0.9f); dl->PathStroke(col, 0, t);
-            dl->PathArcTo(P(0.05f, 0.f), s * 0.7f, -0.9f, 0.9f);  dl->PathStroke(col, 0, t);
-        }
-    } else if (icon == "shuffle") {
-        dl->AddLine(P(-0.7f, -0.45f), P(0.6f, 0.45f), col, t);
-        dl->AddLine(P(-0.7f, 0.45f), P(0.6f, -0.45f), col, t);
-        dl->AddTriangleFilled(P(0.75f, 0.45f), P(0.4f, 0.2f), P(0.4f, 0.7f), col);
-        dl->AddTriangleFilled(P(0.75f, -0.45f), P(0.4f, -0.2f), P(0.4f, -0.7f), col);
-    } else if (icon == "repeat") {
-        dl->AddRect(P(-0.65f, -0.4f), P(0.65f, 0.4f), col, s * 0.3f, 0, t);
-        dl->AddTriangleFilled(P(0.1f, -0.65f), P(0.1f, -0.15f), P(0.45f, -0.4f), col);
-    } else if (icon == "preset_next" || icon == "viz") {
-        dl->AddCircle(c, s * 0.6f, col, 0, t);
-        dl->AddCircleFilled(c, s * 0.2f, col);
-    }
-}
-
 } // namespace
 
 // ─── Skins on disk ────────────────────────────────────────────────────────────
@@ -132,6 +74,15 @@ bool UIManager::loadSkin(const std::string& path) {
     Fonts::noteText(s->name);
     if (skin_) skin_->freeTextures();
     skin_ = std::move(s);
+    skin_page_ = skin_->start_page;
+    skin_prev_zoom_ = 0.f;
+    // A newly picked skin opens at its preferred zoom, but never bigger than 75%
+    // of the screen (big skins like MidnightNeon would fill it). Reopening the
+    // saved skin keeps the zoom chosen for it.
+    if (path != skin_path_ || skin_zoom_ <= 0.f) {
+        const float want = skin_->default_zoom > 0.f ? skin_->default_zoom : 2.f;
+        skin_zoom_ = std::min(want, skinFitZoom(0.75f));
+    }
     skin_error_.clear();
     skin_path_ = path;
     if (skin_mode_) applySkinWindow();   // reshape the window for the new skin
@@ -174,10 +125,22 @@ SDL_HitTestResult UIManager::skinHitTest(SDL_Window*, const SDL_Point* pt, void*
     return SDL_HITTEST_DRAGGABLE;   // everything else moves the window
 }
 
+// Zoom at which the skin takes `fraction` of the usable screen (1 if unknown)
+float UIManager::skinFitZoom(float fraction) const {
+    SDL_Window* win = SDL_GL_GetCurrentWindow();
+    SDL_Rect usable;
+    if (!win || !skin_ || skin_->width <= 0 || skin_->height <= 0 ||
+        SDL_GetDisplayUsableBounds(std::max(0, SDL_GetWindowDisplayIndex(win)), &usable) != 0)
+        return 1.f;
+    return std::min(usable.w * fraction / skin_->width, usable.h * fraction / skin_->height);
+}
+
 void UIManager::applySkinWindow() {
     SDL_Window* win = SDL_GL_GetCurrentWindow();
     if (!win || !skin_) return;
     skin_->uploadTextures();
+    // Never bigger than the screen the window is on
+    skin_zoom_ = std::min(skin_zoom_, skinFitZoom(0.97f));
     const int w = (int)std::lround(skin_->width * skin_zoom_);
     const int h = (int)std::lround(skin_->height * skin_zoom_);
     SDL_SetWindowMinimumSize(win, 1, 1);
@@ -229,32 +192,34 @@ void UIManager::toggleSkinMode() {
 }
 
 void UIManager::setSkinZoom(float z) {
-    skin_zoom_ = std::clamp(z, 1.f, 4.f);
+    skin_zoom_ = std::clamp(z, 0.3f, 100.f);   // applySkinWindow() limits it to the screen
     if (skin_mode_) applySkinWindow();
     saveSettings();
 }
 
 // ─── Actions from skin buttons ────────────────────────────────────────────────
 void UIManager::skinAction(const std::string& a) {
-    auto startIfStopped = [&] {
-        if (player_.getState() == PlayerState::Stopped && playlist_.size() > 0)
-            playEntry(std::max(0, playlist_.getIndex()));
-    };
-    if (a == "play")           { if (player_.getState() == PlayerState::Paused) player_.play(); else startIfStopped(); }
-    else if (a == "pause")     player_.pause();
-    else if (a == "playpause") {
-        auto s = player_.getState();
-        if (s == PlayerState::Playing) player_.pause();
-        else if (s == PlayerState::Paused) player_.play();
-        else startIfStopped();
+    if (a.rfind("page:", 0) == 0)  { skin_page_ = a.substr(5); return; }
+    if (a.rfind("list:", 0) == 0)  {
+        skin_list_ = a.substr(5);
+        if (skin_list_ == "library") startLibraryScan();
+        return;
     }
+    if (a == "play")           { if (player_.getState() != PlayerState::Playing) togglePlay(); }
+    else if (a == "pause")     player_.pause();
+    else if (a == "playpause") togglePlay();
     else if (a == "stop")      player_.stop();
     else if (a == "next")      { if (playlist_.next()) playEntry(playlist_.getIndex()); }
     else if (a == "prev")      { if (playlist_.prev()) playEntry(playlist_.getIndex()); }
-    else if (a == "open")      openFile();
-    else if (a == "menu")      ImGui::OpenPopup("##skinmenu");
+    else if (a == "open" || a == "add") openFile();
+    else if (a == "menu" || a == "more") ImGui::OpenPopup("##skinmenu");
     else if (a == "close")     quit_requested_ = true;
     else if (a == "minimize")  { if (SDL_Window* w = SDL_GL_GetCurrentWindow()) SDL_MinimizeWindow(w); }
+    else if (a == "maximize") {
+        // Toggle between the skin filling the screen and the previous size
+        if (skin_prev_zoom_ > 0.f) { float z = skin_prev_zoom_; skin_prev_zoom_ = 0.f; setSkinZoom(z); }
+        else { skin_prev_zoom_ = skin_zoom_; setSkinZoom(100.f); }   // clamped to the screen
+    }
     else if (a == "fullwindow") toggleSkinMode();
     else if (a == "playlist")  { toggleSkinMode(); show_sidebar_ = true; sidebar_tab_ = 0; }
     else if (a == "settings")  { toggleSkinMode(); show_sidebar_ = true; sidebar_tab_ = 3; }
@@ -265,24 +230,50 @@ void UIManager::skinAction(const std::string& a) {
         RepeatMode r = playlist_.getRepeat();
         playlist_.setRepeat(r == RepeatMode::None ? RepeatMode::All : r == RepeatMode::All ? RepeatMode::One : RepeatMode::None);
     }
+    else if (a == "favorite")  { if (const PlaylistEntry* pe = playlist_.current()) toggleFavorite(*pe); }
+    else if (a == "eq_toggle") { eq_.setEnabled(!eq_.enabled()); saveSettings(); }
     else if (a == "preset_next") milkdrop_.next();
     else if (a == "preset_prev") milkdrop_.previous();
     else if (a == "viz_next")  viz_.setMode((Visualizer::Mode)(((int)viz_.getMode() + 1) % vizModeCount()));
 }
 
 bool UIManager::skinToggleOn(const std::string& a) const {
+    if (a.rfind("page:", 0) == 0) return skin_page_ == a.substr(5);
+    if (a.rfind("list:", 0) == 0) return skin_list_ == a.substr(5);
     if (a == "playpause" || a == "play") return player_.getState() == PlayerState::Playing;
     if (a == "pause")   return player_.getState() == PlayerState::Paused;
     if (a == "mute")    return player_.isMuted();
     if (a == "shuffle") return playlist_.getShuffle();
     if (a == "repeat")  return playlist_.getRepeat() != RepeatMode::None;
+    if (a == "favorite") { const PlaylistEntry* pe = playlist_.current(); return pe && isFavorite(pe->path); }
+    if (a == "eq_toggle") return eq_.enabled();
     return false;
 }
 
 std::string UIManager::skinText(const std::string& what, const std::string& custom) const {
     const PlaylistEntry* pe = playlist_.current();
+    const MediaInfo& mi = player_.mediaInfo();
+    const bool has = pe && player_.getFilePath() == pe->path;   // info belongs to this entry
     const double cur = player_.getCurrentTime(), dur = player_.getDuration();
-    if (what == "title")     return open_job_.valid() ? "Loading..." : pe ? pe->title : "PulseAmp";
+    if (what == "title") {
+        if (open_job_.valid()) return "Loading...";
+        if (has && !mi.title.empty()) return mi.title;
+        return pe ? pe->title : "PulseAmp";
+    }
+    if (what == "artist") {
+        if (has && !mi.artist.empty()) return mi.artist;
+        return pe ? pe->artist : "";
+    }
+    if (what == "album")     return has ? mi.album : "";
+    if (what == "format") {
+        if (!has || mi.codec.empty()) return "";
+        std::string s = mi.codec;
+        char b[32];
+        if (mi.sample_rate) { std::snprintf(b, sizeof(b), "   |   %.1f kHz", mi.sample_rate / 1000.0); s += b; }
+        if (mi.bits)        { std::snprintf(b, sizeof(b), "   |   %d bit", mi.bits); s += b; }
+        if (mi.bitrate_kbps){ std::snprintf(b, sizeof(b), "   |   %d kbps", mi.bitrate_kbps); s += b; }
+        return s;
+    }
     if (what == "time")      return formatTime(cur);
     if (what == "remaining") return "-" + formatTime(std::max(0.0, dur - cur));
     if (what == "duration")  return formatTime(dur);
@@ -290,6 +281,7 @@ std::string UIManager::skinText(const std::string& what, const std::string& cust
     if (what == "bpm")       { char b[32]; std::snprintf(b, sizeof(b), "%.0f BPM", displayed_bpm_); return displayed_bpm_ > 0 ? b : ""; }
     if (what == "preset")    return milkdrop_.presetName();
     if (what == "volume")    { char b[32]; std::snprintf(b, sizeof(b), "%.0f%%", player_.getVolume() * 100.f); return b; }
+    if (what == "page")      return skin_page_;
     return custom;
 }
 
@@ -313,7 +305,10 @@ void UIManager::drawSkinMode(int win_w, int win_h, double time) {
     if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         ImGui::OpenPopup("##skinmenu");
-    skin_popup_open_ = ImGui::IsPopupOpen("##skinmenu");
+    skin_popup_open_ = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);   // menus, dropdowns
+    // Mouse wheel: volume (track lists are child windows and scroll themselves)
+    if (ImGui::GetIO().MouseWheel != 0.f && !skin_popup_open_ && ImGui::IsWindowHovered())
+        setVolume(volume_ + ImGui::GetIO().MouseWheel * 0.05f);
     if (ImGui::BeginPopup("##skinmenu")) {
         drawSkinMenu();
         ImGui::EndPopup();
@@ -327,9 +322,13 @@ void UIManager::drawSkinMenu() {
     if (ImGui::MenuItem("Back to full window", "Ctrl+M")) toggleSkinMode();
     if (ImGui::MenuItem("Open file...", "O")) openFile();
     ImGui::Separator();
+    if (ImGui::BeginMenu("Visualizer")) {
+        drawVizMenu();
+        ImGui::EndMenu();
+    }
     drawSkinList();
     if (ImGui::BeginMenu("Zoom")) {
-        for (float z : { 1.f, 1.5f, 2.f, 3.f }) {
+        for (float z : { 0.5f, 0.75f, 1.f, 1.5f, 2.f, 3.f }) {
             char label[16];
             std::snprintf(label, sizeof(label), "%gx", z);
             if (ImGui::MenuItem(label, nullptr, std::fabs(skin_zoom_ - z) < 0.01f)) setSkinZoom(z);
@@ -484,13 +483,12 @@ void UIManager::drawWinampSkin(double time) {
     if (dur > 0) blit("posbar", ImGui::IsItemActive() ? 278.f : 248.f, 0, 29, 10, 16 + frac * (248 - 29), 72);
 
     // Volume (volume.bmp: 28 background frames + thumb)
-    float vol = player_.getVolume();
+    float vol = std::min(1.f, player_.getVolume());   // the bar shows 0..100% (boost shows full)
     skinHot("##w_vol", 107, 57, 68, 13, &p);
     if (ImGui::IsItemActive()) {
         float mx = (ImGui::GetIO().MousePos.x - o.x) / z;
         vol = std::clamp((mx - 107.f - 7.f) / (68.f - 14.f), 0.f, 1.f);
-        volume_ = vol;
-        player_.setVolume(vol);
+        setVolume(vol);
     }
     blit("volume", 0, std::round(vol * 27.f) * 15.f, 68, 13, 107, 57);
     blit("volume", ImGui::IsItemActive() ? 0.f : 15.f, 422, 14, 11, 107 + vol * (68 - 14), 58);
@@ -545,148 +543,3 @@ void UIManager::drawWinampSkin(double time) {
     }
 }
 
-// ─── PulseAmp skin ────────────────────────────────────────────────────────────
-void UIManager::drawPulseSkin(double time) {
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float z = skin_zoom_;
-    const ImVec2 o = skin_o_;
-    const Skin& sk = *skin_;
-    auto S2 = [&](float x, float y) { return ImVec2(o.x + x * z, o.y + y * z); };
-
-    // Background
-    const ImVec2 b0 = S2(0, 0), b1 = S2((float)sk.width, (float)sk.height);
-    if (const SkinImage* bg = sk.image(sk.background)) {
-        dl->AddImage(texId(bg), b0, b1);
-    } else if (sk.shape == "circle" || sk.shape == "ellipse") {
-        dl->AddCircleFilled({(b0.x + b1.x) * 0.5f, (b0.y + b1.y) * 0.5f}, (b1.x - b0.x) * 0.5f, sk.bg_color, 96);
-    } else {
-        dl->AddRectFilled(b0, b1, sk.bg_color, sk.shape == "rounded" ? sk.corner_radius * z : 0.f);
-    }
-
-    for (size_t i = 0; i < sk.controls.size(); ++i) {
-        const SkinControl& c = sk.controls[i];
-        const ImVec2 p0 = S2(c.x, c.y), p1 = S2(c.x + c.w, c.y + c.h);
-        const ImVec2 mid = {(p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f};
-        char id[32];
-        std::snprintf(id, sizeof(id), "##sc%zu", i);
-
-        auto shapeFill = [&](ImU32 col) {
-            if (!col) return;
-            if (c.shape == "circle") dl->AddCircleFilled(mid, std::min(p1.x - p0.x, p1.y - p0.y) * 0.5f, col, 48);
-            else dl->AddRectFilled(p0, p1, col, c.shape == "rect" ? 0.f : c.radius * z);
-        };
-        auto drawImg = [&](const std::string& key) {
-            if (const SkinImage* img = sk.image(key)) { dl->AddImage(texId(img), p0, p1); return true; }
-            return false;
-        };
-
-        if (c.type == "image") {
-            drawImg(c.image);
-        } else if (c.type == "text") {
-            std::string s = skinText(c.content.empty() ? "custom" : c.content, c.text);
-            Fonts::noteText(s);
-            const float fs = c.font_size * z;
-            ImFont* font = ImGui::GetFont();
-            ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.f, s.c_str());
-            float x = p0.x, y = mid.y - ts.y * 0.5f;
-            dl->PushClipRect(p0, p1, true);
-            if (ts.x > p1.x - p0.x && c.scroll) {
-                std::string loop = s + "     ";
-                float lw = font->CalcTextSizeA(fs, FLT_MAX, 0.f, loop.c_str()).x;
-                float off = std::fmod((float)time * 30.f * z, lw);
-                dl->AddText(font, fs, {x - off, y}, c.color, loop.c_str());
-                dl->AddText(font, fs, {x - off + lw, y}, c.color, loop.c_str());
-            } else {
-                if (c.align == "center") x = mid.x - ts.x * 0.5f;
-                else if (c.align == "right") x = p1.x - ts.x;
-                dl->AddText(font, fs, {x, y}, c.color, s.c_str());
-            }
-            dl->PopClipRect();
-        } else if (c.type == "visualizer") {
-            shapeFill(c.bg);
-            bool clicked = skinHot(id, c.x, c.y, c.w, c.h, nullptr);
-            Visualizer::Mode m = viz_.getMode();
-            static const std::pair<const char*, Visualizer::Mode> modes[] = {
-                {"spectrum", Visualizer::Mode::SpectrumBars}, {"oscilloscope", Visualizer::Mode::Oscilloscope},
-                {"radial", Visualizer::Mode::RadialSpectrum}, {"bpm", Visualizer::Mode::BPMPulse},
-                {"particles", Visualizer::Mode::ParticleStorm}, {"milkdrop", Visualizer::Mode::MilkDrop} };
-            for (auto& [n, mm] : modes) if (c.viz_mode == n) m = mm;
-            if (clicked && c.viz_mode == "current") skinAction("viz_next");
-            dl->PushClipRect(p0, p1, true);
-            if (m == Visualizer::Mode::MilkDrop) {
-                if (milkdrop_.init() && milkdrop_.presetCount() > 0) {
-                    milkdrop_w_ = p1.x - p0.x;          // rendered in preRenderGL()
-                    milkdrop_h_ = p1.y - p0.y;
-                    if (milkdrop_.texture())
-                        dl->AddImage((ImTextureID)(intptr_t)milkdrop_.texture(), p0, p1, {0, 1}, {1, 0});
-                }
-            } else {
-                // Draw in the skin's colours and mode, then restore the app's
-                Visualizer::Mode saved = viz_.getMode();
-                ImU32 saved_col = viz_.getColor();
-                viz_.setMode(m);
-                viz_.setColor(sk.accent);
-                viz_.render(dl, p0, {p1.x - p0.x, p1.y - p0.y}, displayed_bpm_, time);
-                viz_.setMode(saved);
-                viz_.setColor(saved_col);
-            }
-            dl->PopClipRect();
-        } else if (c.type == "slider") {
-            bool pressed;
-            skinHot(id, c.x, c.y, c.w, c.h, &pressed);
-            const bool active = ImGui::IsItemActive();
-            const double dur = player_.getDuration();
-            float v = c.action == "volume" ? player_.getVolume()
-                    : dur > 0 ? (float)(player_.getCurrentTime() / dur) : 0.f;
-            if (active) {
-                ImVec2 m = ImGui::GetIO().MousePos;
-                v = c.vertical ? 1.f - (m.y - p0.y) / (p1.y - p0.y) : (m.x - p0.x) / (p1.x - p0.x);
-                v = std::clamp(v, 0.f, 1.f);
-                if (c.action == "volume") { volume_ = v; player_.setVolume(v); }
-                else skin_seek_preview_ = v;
-            }
-            if (ImGui::IsItemDeactivated() && c.action == "seek" && dur > 0)
-                player_.seek(skin_seek_preview_ * dur);
-            // Track, fill, thumb
-            if (!drawImg(c.image)) shapeFill(c.bg ? c.bg : IM_COL32(255, 255, 255, 40));
-            ImVec2 f1 = c.vertical ? ImVec2(p1.x, p1.y - (p1.y - p0.y) * v) : ImVec2(p0.x + (p1.x - p0.x) * v, p1.y);
-            ImVec2 f0 = c.vertical ? ImVec2(p0.x, f1.y) : p0;
-            if (c.vertical) dl->AddRectFilled(f0, p1, c.fill, c.shape == "rect" ? 0.f : c.radius * z);
-            else            dl->AddRectFilled(f0, f1, c.fill, c.shape == "rect" ? 0.f : c.radius * z);
-            ImVec2 th = c.vertical ? ImVec2(mid.x, f1.y) : ImVec2(f1.x, mid.y);
-            if (const SkinImage* ti = sk.image(c.image_on)) {       // image_on = thumb image
-                float tw = ti->w * z * 0.5f, thh = ti->h * z * 0.5f;
-                dl->AddImage(texId(ti), {th.x - tw, th.y - thh}, {th.x + tw, th.y + thh});
-            } else {
-                dl->AddCircleFilled(th, (active ? 1.2f : 1.f) * c.radius * z, c.color, 24);
-            }
-        } else {   // button / toggle
-            bool pressed;
-            if (skinHot(id, c.x, c.y, c.w, c.h, &pressed)) skinAction(c.action);
-            const bool hover = ImGui::IsItemHovered();
-            const bool on = skinToggleOn(c.action);
-            bool drew = false;
-            if (!c.image.empty()) {
-                drew = (pressed && drawImg(c.image_pressed)) || (on && drawImg(c.image_on)) ||
-                       (hover && drawImg(c.image_hover)) || drawImg(c.image);
-            }
-            if (!drew) {
-                ImU32 bgc = pressed && c.bg_pressed ? c.bg_pressed : on && c.bg_on ? c.bg_on
-                          : hover && c.bg_hover ? c.bg_hover : c.bg;
-                shapeFill(bgc);
-                ImU32 fg = pressed && c.color_pressed ? c.color_pressed : on && c.color_on ? c.color_on
-                         : hover && c.color_hover ? c.color_hover : c.color;
-                std::string icon = c.icon;
-                if (icon.empty() && c.text.empty()) icon = c.action;
-                if (icon == "playpause") icon = on ? "pause" : "play";
-                if (!icon.empty())
-                    drawIcon(dl, icon, mid, std::min(p1.x - p0.x, p1.y - p0.y) * 0.32f, fg);
-                if (!c.text.empty()) {
-                    const float fs = c.font_size * z;
-                    ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0.f, c.text.c_str());
-                    dl->AddText(ImGui::GetFont(), fs, {mid.x - ts.x * 0.5f, mid.y - ts.y * 0.5f}, fg, c.text.c_str());
-                }
-            }
-        }
-    }
-}

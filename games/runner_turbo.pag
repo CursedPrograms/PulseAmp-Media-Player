@@ -1,0 +1,10 @@
+{
+  // Neon Runner, faster and floatier. Obstacles land on the beat of the music.
+  "name": "Runner: Turbo",
+  "engine": "runner",
+  "author": "PulseAmp",
+  "colors": { "primary": "#ff3cc8", "secondary": "#00ff8c", "accent": "#ffffff" },
+  "speed": 1.35,
+  "gravity": 0.8,
+  "gap": 0.9
+}

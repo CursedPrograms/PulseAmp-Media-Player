@@ -88,13 +88,38 @@ bool loadFiles(const std::string& path, SkinFiles& files, std::string& err) {
     return true;
 }
 
-// ─── Image decoding (BMP / PNG / JPEG) via FFmpeg ─────────────────────────────
 bool decodeImage(const std::vector<uint8_t>& data, SkinImage& out) {
-    if (data.size() < 8) return false;
+    return decodeImageData(data.data(), data.size(), out);
+}
+
+} // namespace
+
+// ─── Image decoding (BMP / PNG / JPEG / WebP) via FFmpeg ──────────────────────
+// swscale writes (and reads) whole SIMD blocks, so a row can run a little past
+// its width. Converting straight into an exact-size w*h*4 buffer lets the last
+// row overrun it and corrupt the heap: convert into an aligned buffer with
+// padded rows and a spare row, then pack the rows tightly.
+bool swsToRGBA(SwsContext* sws, const uint8_t* const src[], const int src_ls[], int src_h,
+               int dst_w, int dst_h, std::vector<uint8_t>& out) {
+    uint8_t* buf[4] = {};
+    int ls[4] = {};
+    if (av_image_alloc(buf, ls, dst_w, dst_h + 1, AV_PIX_FMT_RGBA, 64) < 0) return false;
+    sws_scale(sws, src, src_ls, 0, src_h, buf, ls);
+    const size_t row = (size_t)dst_w * 4;
+    out.resize(row * dst_h);
+    for (int y = 0; y < dst_h; ++y) std::memcpy(out.data() + row * y, buf[0] + (size_t)ls[0] * y, row);
+    av_freep(&buf[0]);
+    return true;
+}
+
+bool decodeImageData(const uint8_t* bytes, size_t size, SkinImage& out) {
+    if (size < 12) return false;
+    const uint8_t* data = bytes;
     AVCodecID id;
     if (data[0] == 'B' && data[1] == 'M')                     id = AV_CODEC_ID_BMP;
     else if (data[0] == 0x89 && data[1] == 'P' && data[2] == 'N') id = AV_CODEC_ID_PNG;
     else if (data[0] == 0xFF && data[1] == 0xD8)              id = AV_CODEC_ID_MJPEG;
+    else if (!std::memcmp(data, "RIFF", 4) && !std::memcmp(data + 8, "WEBP", 4)) id = AV_CODEC_ID_WEBP;
     else return false;
 
     const AVCodec* codec = avcodec_find_decoder(id);
@@ -104,10 +129,10 @@ bool decodeImage(const std::vector<uint8_t>& data, SkinImage& out) {
     AVFrame* frame = av_frame_alloc();
     bool ok = false;
     // FFmpeg decoders may read a little past the end: pad the buffer
-    std::vector<uint8_t> padded(data);
-    padded.resize(data.size() + AV_INPUT_BUFFER_PADDING_SIZE, 0);
+    std::vector<uint8_t> padded(data, data + size);
+    padded.resize(size + AV_INPUT_BUFFER_PADDING_SIZE, 0);
     pkt->data = padded.data();
-    pkt->size = (int)data.size();
+    pkt->size = (int)size;
     if (avcodec_open2(ctx, codec, nullptr) >= 0 &&
         avcodec_send_packet(ctx, pkt) >= 0 && avcodec_receive_frame(ctx, frame) >= 0 &&
         frame->width > 0 && frame->height > 0) {
@@ -117,12 +142,8 @@ bool decodeImage(const std::vector<uint8_t>& data, SkinImage& out) {
         if (sws) {
             out.w = frame->width;
             out.h = frame->height;
-            out.rgba.assign((size_t)out.w * out.h * 4, 0);
-            uint8_t* dst[4] = { out.rgba.data(), nullptr, nullptr, nullptr };
-            int ls[4] = { out.w * 4, 0, 0, 0 };
-            sws_scale(sws, frame->data, frame->linesize, 0, out.h, dst, ls);
+            ok = swsToRGBA(sws, frame->data, frame->linesize, out.h, out.w, out.h, out.rgba);
             sws_freeContext(sws);
-            ok = true;
         }
     }
     pkt->data = nullptr; pkt->size = 0;
@@ -131,6 +152,8 @@ bool decodeImage(const std::vector<uint8_t>& data, SkinImage& out) {
     avcodec_free_context(&ctx);
     return ok;
 }
+
+namespace {
 
 // Fill polygons into a mask (even-odd per polygon, union across polygons)
 void fillPolygons(const std::vector<std::vector<std::pair<int,int>>>& polys,
@@ -289,6 +312,8 @@ std::unique_ptr<Skin> Skin::load(const std::string& path, std::string& err) {
         skin->accent   = parseColor(j["accent"].str(), skin->accent);
         skin->shape    = lower(j["shape"].str("rect"));
         skin->corner_radius = (float)j["corner_radius"].num(16);
+        skin->start_page    = lower(j["start_page"].str("now"));
+        skin->default_zoom  = (float)j["zoom"].num(0);
 
         // Every image a control or the background references
         auto want = [&](const std::string& f) { if (!f.empty() && !skin->image(f)) loadImage(f, f); };
@@ -334,6 +359,18 @@ std::unique_ptr<Skin> Skin::load(const std::string& path, std::string& err) {
             sc.scroll    = c["scroll"].boolean(false);
             sc.vertical  = c["vertical"].boolean(false);
             sc.viz_mode  = lower(c["mode"].str("current"));
+            sc.video     = c["video"].boolean(true);
+            sc.border       = parseColor(c["border"].str(), 0);
+            sc.border_on    = parseColor(c["border_on"].str(), 0);
+            sc.border_width = (float)c["border_width"].num(1.5);
+            sc.glow         = parseColor(c["glow"].str(), 0);
+            sc.glow_size    = (float)c["glow_size"].num(10);
+            sc.underline    = c["underline"].boolean(false);
+            for (auto& pg : c["pages"].items()) sc.pages.push_back(lower(pg.str()));
+            sc.source       = lower(c["source"].str("playlist"));
+            sc.row_height   = (float)c["row_height"].num(60);
+            sc.color2       = parseColor(c["color2"].str(), IM_COL32(150, 150, 170, 255));
+            sc.hint         = c["hint"].str();
             skin->controls.push_back(sc);
         }
 

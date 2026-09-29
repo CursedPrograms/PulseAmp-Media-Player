@@ -26,11 +26,25 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
+// 64-byte aligned memory, as swscale's SIMD code expects for its output
+template <class T> struct Aligned64 {
+    using value_type = T;
+    Aligned64() = default;
+    template <class U> Aligned64(const Aligned64<U>&) {}
+    T*   allocate(size_t n)      { return static_cast<T*>(::operator new(n * sizeof(T), std::align_val_t(64))); }
+    void deallocate(T* p, size_t) { ::operator delete(p, std::align_val_t(64)); }
+    template <class U> bool operator==(const Aligned64<U>&) const { return true; }
+    template <class U> bool operator!=(const Aligned64<U>&) const { return false; }
+};
+
 // ─── Video frame (RGBA, ready for upload to GL texture) ──────────────────────
 struct VideoFrame {
-    std::vector<uint8_t> rgba;   // width * height * 4
+    // Rows are `stride` bytes (a multiple of 64, >= width * 4) with a spare row
+    // after the last: swscale writes whole SIMD blocks and can run past a row's end
+    std::vector<uint8_t, Aligned64<uint8_t>> rgba;
     int   width  = 0;
     int   height = 0;
+    int   stride = 0;            // bytes per row
     double pts   = 0.0;          // presentation timestamp (seconds)
 };
 
@@ -76,6 +90,16 @@ private:
     std::atomic<bool>   discard_{ false };
 };
 
+// ─── What's playing: tags, format and cover art ──────────────────────────────
+struct MediaInfo {
+    std::string title, artist, album;
+    std::string codec;           // "FLAC", "MP3", "AAC", "OPUS", ...
+    int sample_rate = 0;         // Hz (source)
+    int bits = 0;                // bit depth, 0 if not meaningful (lossy codecs)
+    int bitrate_kbps = 0;
+    std::vector<uint8_t> art;    // embedded cover image (encoded PNG/JPEG), may be empty
+};
+
 // ─── Open options ─────────────────────────────────────────────────────────────
 struct OpenOptions {
     std::string audio_url;     // separate audio input (e.g. YouTube video + audio streams)
@@ -117,7 +141,8 @@ public:
     void        pause();
     void        stop();
     void        seek(double seconds);
-    void        setVolume(float v) { volume_.store(v); }  // 0..1
+    static constexpr float MAX_VOLUME = 2.f;              // 200% (boost, like VLC)
+    void        setVolume(float v) { volume_.store(v); }  // 0..MAX_VOLUME
     float       getVolume()  const { return volume_.load(); }
     void        setMuted(bool m)   { muted_.store(m); }
     bool        isMuted()    const { return muted_.load(); }
@@ -126,6 +151,7 @@ public:
     PlayerState         getState()       const { return state_.load(); }
     double              getDuration()    const { return duration_; }
     double              getCurrentTime() const; // playback clock (what is being heard/seen)
+    double              resumePosition() const; // where to resume later: 0 once (nearly) finished
     bool                hasVideo()       const { return video_stream_ >= 0; }
     bool                hasAudio()       const { return audio_stream_ >= 0; }
     int                 getVideoWidth()  const { return video_width_; }
@@ -133,6 +159,7 @@ public:
     int                 getSampleRate()  const { return out_sample_rate_; }
     int                 getChannels()    const { return 2; }
     const std::string&  getFilePath()    const { return file_path_; }
+    const MediaInfo&    mediaInfo()      const { return info_; }
 
     // ── Chapters ──────────────────────────────────────────────────────────────
     const std::vector<Chapter>& getChapters() const { return chapters_; }
@@ -230,4 +257,6 @@ private:
 
     std::vector<Chapter>      chapters_;
     std::string               file_path_;
+    MediaInfo                 info_;
+    void readMediaInfo();
 };

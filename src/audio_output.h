@@ -2,6 +2,7 @@
 // ─── audio_output.h ───────────────────────────────────────────────────────────
 #include "player.h"
 #include "spatial_audio.h"
+#include "equalizer.h"
 #include <SDL2/SDL.h>
 #include <atomic>
 
@@ -21,6 +22,7 @@ public:
     void setGain(float g)             { gain_.store(g); }
     void setSpatial(SpatialAudio* s)  { spatial_ = s; }
     void setSpatialWidth(float w)     { spatial_width_.store(w); }
+    void setEqualizer(Equalizer* eq)  { eq_ = eq; }
 
     int  getSampleRate() const { return sample_rate_; }
     int  getChannels()   const { return channels_; }
@@ -31,6 +33,7 @@ private:
     SDL_AudioDeviceID device_  = 0;
     AudioRingBuffer*  ring_    = nullptr;
     SpatialAudio*     spatial_ = nullptr;
+    Equalizer*        eq_      = nullptr;
     int               sample_rate_ = 44100;
     int               channels_    = 2;
 

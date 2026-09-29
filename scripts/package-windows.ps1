@@ -62,6 +62,9 @@ if (-not (Test-Path "$Dist\textures")) { Copy-Item "$textures\textures" "$Dist\t
 # ── Skins ─────────────────────────────────────────────────────────────────────
 Copy-Item "$Root\skins" $Dist -Recurse -Force
 
+# ── Games (.pag files for the Games menu) ────────────────────────────────────
+Copy-Item "$Root\games" $Dist -Recurse -Force
+
 # ── Licenses ──────────────────────────────────────────────────────────────────
 Copy-Item "$Root\LICENSE" "$Dist\LICENSE.txt" -Force
 $ffLicense = Join-Path (Split-Path $FFmpegBin -Parent) "LICENSE.txt"

@@ -173,6 +173,36 @@ std::string errorFrom(const ProcResult& r) {
     return msg;
 }
 
+// Titles often use "fancy" letters (𝐁𝐨𝐥𝐝, 𝕯𝖔𝖚𝖇𝖑𝖊, ｗｉｄｅ) that no UI font has:
+// fold them to plain ASCII so they don't show up as "????"
+std::string plainText(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = (unsigned char)s[i];
+        const int len = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 1;
+        if (i + len > s.size()) { out += s.substr(i); break; }
+        unsigned cp = len == 1 ? c : c & (0x7f >> len);
+        for (int k = 1; k < len; ++k) cp = (cp << 6) | ((unsigned char)s[i + k] & 0x3f);
+
+        int ascii = -1;
+        if (cp >= 0x1D400 && cp <= 0x1D6A3) {          // Mathematical Alphanumeric letters
+            const unsigned k = (cp - 0x1D400) % 52;
+            ascii = k < 26 ? 'A' + (int)k : 'a' + (int)k - 26;
+        } else if (cp >= 0x1D7CE && cp <= 0x1D7FF) {   // ... and digits
+            ascii = '0' + (int)((cp - 0x1D7CE) % 10);
+        } else if (cp >= 0xFF01 && cp <= 0xFF5E) {     // fullwidth ASCII
+            ascii = (int)(cp - 0xFEE0);
+        } else if (cp == 0x3000) {                     // ideographic space
+            ascii = ' ';
+        }
+        if (ascii >= 0) out += (char)ascii;
+        else            out.append(s, i, len);
+        i += len;
+    }
+    return out;
+}
+
 // Flat JSON object of strings -> "Key: value\r\n" header block
 // (only what yt-dlp prints for %(http_headers)j)
 std::string jsonHeadersToHttp(const std::string& j) {
@@ -205,6 +235,15 @@ std::string jsonHeadersToHttp(const std::string& j) {
 // ─── URL helpers ──────────────────────────────────────────────────────────────
 bool isUrl(const std::string& s) {
     return s.rfind("http://", 0) == 0 || s.rfind("https://", 0) == 0;
+}
+
+std::string youtubeThumbnail(const std::string& url) {
+    std::string id;
+    auto v = url.find("v=");
+    if (url.find("youtube.com/") != std::string::npos && v != std::string::npos) id = url.substr(v + 2);
+    else if (auto p = url.find("youtu.be/"); p != std::string::npos) id = url.substr(p + 9);
+    id = id.substr(0, id.find_first_of("&?#/"));
+    return id.size() == 11 ? "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg" : "";
 }
 
 bool isOnlinePageUrl(const std::string& s) {
@@ -266,15 +305,17 @@ void OnlineService::search(OnlineSource src, const std::string& query, int max_r
         else {
             ProcResult r = runProcess({ exe, "--encoding", "utf-8", "--no-warnings",
                 "--flat-playlist", "--print",
-                "%(webpage_url,url)s\t%(title)s\t%(duration)s\t%(uploader,channel,creator)s", q });
+                "%(webpage_url,url)s\t%(title)s\t%(duration)s\t%(uploader,channel,creator)s\t%(thumbnails.-1.url,thumbnail)s", q });
             if (r.exit_code != 0) err = errorFrom(r);
             for (auto& l : lines(r.out)) {
                 auto f = split(l, '\t');
                 if (f.size() < 4 || !isUrl(f[0])) continue;
                 OnlineResult o;
-                o.url = f[0]; o.title = f[1];
+                o.url = f[0]; o.title = plainText(f[1]);
                 o.duration = toSeconds(f[2]);
-                o.uploader = f[3] == "NA" ? "" : f[3];
+                o.uploader = f[3] == "NA" ? "" : plainText(f[3]);
+                if (f.size() > 4 && isUrl(f[4])) o.thumbnail = f[4];
+                if (o.thumbnail.empty()) o.thumbnail = youtubeThumbnail(o.url);
                 res.push_back(o);
             }
             if (!res.empty()) err.clear();
@@ -317,25 +358,31 @@ ResolvedStream OnlineService::resolveBlocking(const std::string& page_url, bool 
     // Video: YouTube serves video and audio as separate streams, so ask for
     // both (H.264 up to 1080p decodes cheaply); the player reads two inputs.
     // Falls back to a single combined file where a site offers one.
+    // Plain http(s) files are preferred over HLS playlists: SoundCloud's HLS
+    // streams take 8-25 s to open, its progressive MP3 about 3 s.
     const char* fmt = video
-        ? "bv*[height<=?1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=?1080]+ba/b"
-        : "bestaudio/best";
+        ? "bv*[height<=?1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=?1080]+ba/b[protocol^=http]/b"
+        : "bestaudio[protocol^=http]/bestaudio/best";
     ProcResult r = runProcess({ exe, "--encoding", "utf-8", "--no-warnings",
         "--no-playlist", "-f", fmt,
         "--print", "%(title)s", "--print", "%(duration)s",
         "--print", "%(requested_formats.0.url,url)s",
         "--print", "%(requested_formats.1.url)s",
-        "--print", "%(http_headers)j", page_url });
+        "--print", "%(http_headers)j",
+        "--print", "%(artist,uploader,channel,creator)s",
+        "--print", "%(thumbnail)s", page_url });
     auto l = lines(r.out);
     if (r.exit_code != 0 || l.size() < 3 || !isUrl(l[2])) {
         err = r.exit_code != 0 ? errorFrom(r) : "No playable stream found";
         return rs;
     }
-    rs.title      = l[0];
+    rs.title      = plainText(l[0]);
     rs.duration   = toSeconds(l[1]);
     rs.stream_url = l[2];
     if (l.size() > 3 && isUrl(l[3])) rs.audio_url = l[3];
     if (l.size() > 4) rs.http_headers = jsonHeadersToHttp(l[4]);
+    if (l.size() > 5 && l[5] != "NA") rs.uploader = plainText(l[5]);
+    if (l.size() > 6 && isUrl(l[6])) rs.thumbnail = l[6];
     if (rs.http_headers.empty())   // some sites refuse clients without a browser UA
         rs.http_headers = "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0 Safari/537.36\r\n";

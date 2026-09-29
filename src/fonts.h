@@ -7,6 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include <string>
 
+struct ImFont;
+
 namespace Fonts {
     // (Re)build the atlas for a UI scale. Call outside ImGui::NewFrame/Render.
     void build(float scale);
@@ -16,4 +18,7 @@ namespace Fonts {
 
     // True (once) if noteText() saw characters the atlas doesn't have yet
     bool consumeDirty();
+
+    // A ~2.4x size copy of the UI font, for large text (crisp when drawn big)
+    ImFont* large();
 }

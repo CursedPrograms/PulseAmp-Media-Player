@@ -1,6 +1,7 @@
 // ─── ui_manager.cpp ───────────────────────────────────────────────────────────
 #include "ui_manager.h"
 #include "fonts.h"
+#include "logos.h"
 #include "paths.h"
 #include <fstream>
 #include <imgui.h>
@@ -29,7 +30,7 @@ namespace fs = std::filesystem;
 
 static const char* VIZ_NAMES[] = {
     "Spectrum Bars", "Oscilloscope", "Radial Spectrum",
-    "BPM Pulse", "Particle Storm", "MilkDrop"
+    "BPM Pulse", "Particle Storm", "Neon Wave", "MilkDrop"
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,10 +44,13 @@ UIManager::UIManager(Player& player, AudioOutput& audio, VideoRenderer& video,
 {
     viz_.setColor(themes_.accentColor());
     loadSettings();
+    loadFavorites();
 }
 
 UIManager::~UIManager() {
     saveSettings();
+    library_scanning_ = false;
+    if (library_th_.joinable()) library_th_.join();
 }
 
 // ─── Settings: <appdata>/settings.ini (key=value) ────────────────────────────
@@ -60,14 +64,27 @@ void UIManager::loadSettings() {
         std::string k = line.substr(0, eq), v = line.substr(eq + 1);
         double d = std::atof(v.c_str());
         if      (k == "skin")         skin_path_ = v;
-        else if (k == "skin_zoom")    skin_zoom_ = std::clamp((float)d, 1.f, 4.f);
+        else if (k == "skin_zoom")    skin_zoom_ = std::clamp((float)d, 0.3f, 4.f);
         else if (k == "classic")      restore_classic_ = v == "1";
-        else if (k == "volume")       { volume_ = std::clamp((float)d, 0.f, 1.f); player_.setVolume(volume_); }
+        else if (k == "volume")       setVolume((float)d);
         else if (k == "viz_mode")     { int m = (int)d; if (m >= 0 && m < vizModeCount()) viz_.setMode((Visualizer::Mode)m); }
         else if (k == "online_video") online_video_ = v == "1";
         else if (k == "md_shuffle")   md_shuffle_ = v == "1";
         else if (k == "md_duration")  md_duration_ = std::clamp((float)d, 5.f, 120.f);
+        else if (k == "md_locked")    md_locked_ = v == "1";
+        else if (k == "eq_enabled")   eq_.setEnabled(v == "1");
+        else if (k == "eq_preset")    eq_.setPreset((int)d);
+        else if (k == "eq_gains")     eq_.setGainsString(v);
+        else if (k == "viz_height")   viz_height_pct_ = std::clamp((float)d, 0.1f, 0.9f);
+        else if (k == "sidebar_w")    sidebar_w_ = std::clamp((float)d, 220.f, 1200.f);
+        else if (k == "smart_resume") smart_resume_ = v == "1";
+        else if (k == "game_bg")      game_bg_ = std::clamp((int)d, 0, 2);
+        else if (k == "game_dim")     game_video_dim_ = std::clamp((float)d, 0.f, 0.95f);
     }
+    // MilkDrop keeps these until it starts
+    milkdrop_.setShuffle(md_shuffle_);
+    milkdrop_.setLocked(md_locked_);
+    milkdrop_.setDuration(md_duration_);
 }
 
 void UIManager::saveSettings() const {
@@ -80,27 +97,35 @@ void UIManager::saveSettings() const {
       << "viz_mode=" << (int)viz_.getMode() << "\n"
       << "online_video=" << (online_video_ ? 1 : 0) << "\n"
       << "md_shuffle=" << (md_shuffle_ ? 1 : 0) << "\n"
-      << "md_duration=" << md_duration_ << "\n";
+      << "md_duration=" << md_duration_ << "\n"
+      << "md_locked=" << (md_locked_ ? 1 : 0) << "\n"
+      << "eq_enabled=" << (eq_.enabled() ? 1 : 0) << "\n"
+      << "eq_preset=" << eq_.preset() << "\n"
+      << "eq_gains=" << eq_.gainsString() << "\n"
+      << "viz_height=" << viz_height_pct_ << "\n"
+      << "sidebar_w=" << sidebar_w_ << "\n"
+      << "smart_resume=" << (smart_resume_ ? 1 : 0) << "\n"
+      << "game_bg=" << game_bg_ << "\n"
+      << "game_dim=" << game_video_dim_ << "\n";
 }
 
 // ─── Event handling ───────────────────────────────────────────────────────────
 bool UIManager::handleEvent(const SDL_Event& e) {
     if (e.type == SDL_QUIT) return false;
 
+    // Playing a game: it gets the keyboard (read through ImGui); Esc leaves it
+    if (e.type == SDL_KEYDOWN && arcade_.active() && !skin_mode_) {
+        if (e.key.keysym.sym == SDLK_ESCAPE) arcade_.stop();
+        return true;
+    }
+
     if (e.type == SDL_KEYDOWN) {
         switch (e.key.keysym.sym) {
-            case SDLK_SPACE: {
-                auto s = player_.getState();
-                if (s == PlayerState::Playing) player_.pause();
-                else                           player_.play();
-                break;
-            }
+            case SDLK_SPACE: togglePlay(); break;
             case SDLK_LEFT:  player_.seek(player_.getCurrentTime() - 5.0);  break;
             case SDLK_RIGHT: player_.seek(player_.getCurrentTime() + 5.0);  break;
-            case SDLK_UP:    volume_ = std::min(1.f, volume_ + 0.05f);
-                             player_.setVolume(volume_); break;
-            case SDLK_DOWN:  volume_ = std::max(0.f, volume_ - 0.05f);
-                             player_.setVolume(volume_); break;
+            case SDLK_UP:    setVolume(volume_ + 0.05f); break;
+            case SDLK_DOWN:  setVolume(volume_ - 0.05f); break;
             case SDLK_m:
                 if (e.key.keysym.mod & KMOD_CTRL) toggleSkinMode();
                 else player_.setMuted(!player_.isMuted());
@@ -141,6 +166,12 @@ bool UIManager::handleEvent(const SDL_Event& e) {
 // ─── Main render ──────────────────────────────────────────────────────────────
 void UIManager::render(int win_w, int win_h, double time) {
     pollBackgroundWork();
+
+    // Take due video frames every frame, whatever is on screen (skin, game, no
+    // video panel): a full frame queue stops the demuxer, and with it the audio
+    // of the same file
+    if (player_.hasVideo())
+        if (auto vf = player_.pollVideoFrame()) video_.uploadFrame(*vf);
 
     // Keep the audio output in sync with the player (applied instantly in the callback)
     audio_.pause(player_.getState() != PlayerState::Playing);
@@ -205,9 +236,15 @@ void UIManager::render(int win_w, int win_h, double time) {
     // ── Classic mode: the skin is the whole window ─────────────────────────
     if (restore_classic_) { restore_classic_ = false; if (!skin_mode_) toggleSkinMode(); }
     if (skin_mode_ && skin_) {
+        if (arcade_.active()) arcade_.stop();   // games are for the full window only
         drawSkinMode(win_w, win_h, time);
         return;
     }
+
+    // Arrow keys belong to the game while one runs (no widget navigation)
+    ImGuiIO& gio = ImGui::GetIO();
+    if (arcade_.active()) gio.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+    else                  gio.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     // ── Fullscreen: hide menu/transport/cursor after a few idle seconds ──────
     ImGuiIO& io = ImGui::GetIO();
@@ -227,24 +264,39 @@ void UIManager::render(int win_w, int win_h, double time) {
     const float MENUBAR_H   = chrome ? ImGui::GetFrameHeight() : 0.f;
     const float TRANSPORT_H = S(72.f);
     const bool  sidebar     = show_sidebar_ && !fullscreen_;
-    const float SIDEBAR_W   = sidebar ? S(340.f) : 0.f;
+    const float SIDEBAR_W   = sidebar ? std::min(S(sidebar_w_), win_w * 0.7f) : 0.f;
     const float CONTENT_Y   = fullscreen_ ? 0.f : MENUBAR_H;
     const float CONTENT_W   = win_w - SIDEBAR_W;
     const float CONTENT_H   = fullscreen_ ? (float)win_h : win_h - MENUBAR_H - TRANSPORT_H;
     menubar_h_ = MENUBAR_H;
     chrome_visible_ = chrome;
 
-    // In fullscreen show the video if there is one, otherwise the visualizer
-    const bool  video_on = show_video_ && (!fullscreen_ || player_.hasVideo());
+    // Show the video if there is one, otherwise the visualizer. The video panel
+    // stays for messages (drop a file, loading, errors) outside fullscreen.
+    const bool  message  = (!player_.hasAudio() && !player_.hasVideo()) || open_job_.valid() ||
+                           !online_status_.empty() || !show_viz_;
+    const bool  video_on = show_video_ && (player_.hasVideo() || (!fullscreen_ && message));
     const bool  viz_on   = show_viz_   && (!fullscreen_ || !player_.hasVideo());
     const float VIZ_H    = !viz_on ? 0.f : !video_on ? CONTENT_H
         : std::max(S(80.f), CONTENT_H * viz_height_pct_);
     const float VIDEO_H  = video_on ? CONTENT_H - VIZ_H : 0.f;
 
     float cy = CONTENT_Y;
-    if (video_on && VIDEO_H > 0) drawVideoPanel(0, cy, CONTENT_W, VIDEO_H);
+    const bool game = arcade_.active();
+    if (game) drawGame(0, CONTENT_Y, CONTENT_W, CONTENT_H, time);
+    if (!game && video_on && VIDEO_H > 0) drawVideoPanel(0, cy, CONTENT_W, VIDEO_H);
     cy += VIDEO_H;
-    if (viz_on && VIZ_H > 0) drawVizPanel(0, cy, CONTENT_W, VIZ_H, time);
+    if (!game && viz_on && VIZ_H > 0) drawVizPanel(0, cy, CONTENT_W, VIZ_H, time);
+
+    // Draggable dividers: video / visualizer, and the sidebar's left edge
+    const float grip = S(6.f);
+    if (!game && !fullscreen_ && video_on && viz_on && VIDEO_H > 0 && VIZ_H > 0)
+        if (float d = splitter("##split_viz", 0, cy - grip * 0.5f, CONTENT_W, grip, false))
+            viz_height_pct_ = std::clamp(viz_height_pct_ - d / CONTENT_H, 0.1f, 0.9f);
+    if (sidebar)
+        if (float d = splitter("##split_side", CONTENT_W - grip * 0.5f, CONTENT_Y, grip, CONTENT_H, true))
+            sidebar_w_ = std::clamp(std::min(S(sidebar_w_), win_w * 0.7f) / ui_scale_ - d / ui_scale_,
+                                    220.f, win_w * 0.7f / ui_scale_);
 
     if (chrome) {
         drawMenuBar();
@@ -256,16 +308,24 @@ void UIManager::render(int win_w, int win_h, double time) {
     // Info overlay
     if (info_overlay_ && overlay_alpha_ > 0.01f)
         drawInfoOverlay(time);
+    if (resumed_at_ > 0.0) drawResumePrompt(0, CONTENT_Y, CONTENT_H);
 
-    // Double-click on the video / visualizer toggles fullscreen
-    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered() &&
+    // Over the video / visualizer: double-click toggles fullscreen, the wheel sets the volume
+    const bool double_click = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+    if ((double_click || io.MouseWheel != 0.f) && !ImGui::IsAnyItemHovered() &&
         !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
         ImVec2 m = io.MousePos;
         bool in_content = m.x >= 0 && m.x < CONTENT_W &&
                           m.y >= CONTENT_Y && m.y < CONTENT_Y + CONTENT_H;
         bool on_chrome  = chrome && (m.y < MENUBAR_H || m.y >= win_h - TRANSPORT_H);
         bool over_popup_window = show_about_ || show_theme_editor_;
-        if (in_content && !on_chrome && !over_popup_window) toggleFullscreen();
+        if (in_content && !on_chrome && !over_popup_window) {
+            if (double_click) toggleFullscreen();
+            if (io.MouseWheel != 0.f) {
+                setVolume(volume_ + io.MouseWheel * 0.05f);
+                last_activity_ = now;   // show the transport (and its volume) in fullscreen
+            }
+        }
     }
 
     if (show_theme_editor_) drawThemeEditor();
@@ -277,10 +337,19 @@ void UIManager::render(int win_w, int win_h, double time) {
 void UIManager::drawAboutWindow() {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
                             ImGuiCond_Appearing, {0.5f, 0.5f});
-    if (!ImGui::Begin("About PulseAmp", &show_about_,
-                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+    ImGui::SetNextWindowSize({0, 0}, ImGuiCond_Appearing);   // fit the contents when opened, then resizable
+    if (!ImGui::Begin("About PulseAmp", &show_about_, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         return;
+    }
+    // Logo badge, centred above the text
+    const Logos::Texture& badge = Logos::get(Logos::Badge);
+    if (badge.tex) {
+        const float sz = S(96.f);
+        const float text_w = ImGui::CalcTextSize("Built with FFmpeg (LGPL), SDL2 and Dear ImGui").x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, (text_w - sz) * 0.5f));
+        ImGui::Image((ImTextureID)(intptr_t)badge.tex, {sz, sz * badge.h / std::max(1, badge.w)});
+        ImGui::Spacing();
     }
     ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(themes_.accentColor()),
                        "PulseAmp %s", PULSEAMP_VERSION);
@@ -310,9 +379,7 @@ void UIManager::drawMenuBar() {
 
     if (ImGui::BeginMenu("Playback")) {
         bool playing = player_.getState() == PlayerState::Playing;
-        if (ImGui::MenuItem(playing ? "Pause\t(Space)" : "Play\t(Space)")) {
-            if (playing) player_.pause(); else player_.play();
-        }
+        if (ImGui::MenuItem(playing ? "Pause\t(Space)" : "Play\t(Space)")) togglePlay();
         if (ImGui::MenuItem("Stop"))      player_.stop();
         if (ImGui::MenuItem("Next\t(N)")) { auto* ne=playlist_.next(); if(ne)playEntry(playlist_.getIndex()); }
         if (ImGui::MenuItem("Prev\t(P)")) { auto* pr=playlist_.prev(); if(pr)playEntry(playlist_.getIndex()); }
@@ -337,11 +404,7 @@ void UIManager::drawMenuBar() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Visualizer Mode")) {
-            for (int i = 0; i < vizModeCount(); ++i) {
-                bool sel = ((int)viz_.getMode() == i);
-                if (ImGui::MenuItem(VIZ_NAMES[i], nullptr, sel))
-                    viz_.setMode((Visualizer::Mode)i);
-            }
+            drawVizMenu();
             ImGui::EndMenu();
         }
         ImGui::EndMenu();
@@ -351,6 +414,11 @@ void UIManager::drawMenuBar() {
         if (ImGui::MenuItem("YouTube / SoundCloud")) { show_sidebar_ = true; sidebar_tab_ = 1; }
         if (ImGui::MenuItem("Converter")) { show_sidebar_ = true; sidebar_tab_ = 2; }
         if (ImGui::MenuItem("Settings"))  { show_sidebar_ = true; sidebar_tab_ = 3; }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Games")) {
+        drawGamesMenu();
         ImGui::EndMenu();
     }
 
@@ -381,10 +449,6 @@ void UIManager::drawVideoPanel(float x, float y, float w, float h) {
         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
 
-    // Poll video frame
-    auto vf = player_.pollVideoFrame();
-    if (vf) video_.uploadFrame(*vf);
-
     if (video_.isReady() && player_.hasVideo()) {
         float vw = (float)video_.getWidth();
         float vh = (float)video_.getHeight();
@@ -409,13 +473,46 @@ void UIManager::drawVideoPanel(float x, float y, float w, float h) {
             m = "Drop a file or a link here to play";
         const char* msg = m.c_str();
         ImVec2 ts = ImGui::CalcTextSize(msg);
+        float ty = y + (h - ts.y) * 0.5f;
+        // Nothing playing: the logo wave above the message, dimmed
+        const Logos::Texture& wave = Logos::get(Logos::Wave);
+        const float lw = std::min(S(160.f), w * 0.4f), lh = lw * wave.h / std::max(1, wave.w);
+        if (wave.tex && !player_.hasAudio() && h > lh + ts.y * 4.f) {
+            ty += (lh + S(16.f)) * 0.5f;
+            const ImVec2 l0 = {x + (w - lw) * 0.5f, ty - S(16.f) - lh};
+            ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)wave.tex, l0, {l0.x + lw, l0.y + lh},
+                                                 {0, 0}, {1, 1}, IM_COL32(255, 255, 255, 110));
+        }
         ImGui::GetWindowDrawList()->AddText(
-            {x + (w - ts.x) * 0.5f, y + (h - ts.y) * 0.5f},
+            {x + (w - ts.x) * 0.5f, ty},
             ImGui::GetColorU32(ImGuiCol_TextDisabled), msg);
     }
 
     ImGui::End();
     ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+}
+
+// ─── Resume prompt: bottom-left of the content for a few seconds ─────────────
+void UIManager::drawResumePrompt(float x, float y, float h) {
+    const double SHOW = 8.0, age = ImGui::GetTime() - resume_shown_;
+    if (age > SHOW) { resumed_at_ = 0.0; return; }
+    const float alpha = (float)std::min(1.0, (SHOW - age) / 0.5);   // fade out at the end
+
+    ImGui::SetNextWindowPos({x + S(12.f), y + h - S(12.f)}, ImGuiCond_Always, {0.f, 1.f});
+    ImGui::SetNextWindowBgAlpha(0.75f * alpha);
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+    ImGui::Begin("##resume", nullptr,
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Resumed at %s", formatTime(resumed_at_).c_str());
+    ImGui::SameLine();
+    if (ImGui::Button("Start over")) {
+        player_.seek(0.0);
+        resumed_at_ = 0.0;
+    }
+    ImGui::End();
     ImGui::PopStyleVar();
 }
 
@@ -447,14 +544,196 @@ void UIManager::drawVizPanel(float x, float y, float w, float h, double time) {
         ImGui::PopStyleColor();
     }
 
+    // Right-click: visualizer menu
+    if ((ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) ||
+        (dev_viz_menu_ > 0 && --dev_viz_menu_ == 0))
+        ImGui::OpenPopup("##vizmenu");
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {S(8.f), S(8.f)});
+    if (dev_viz_menu_ == 0 && dev_viz_menu_center_)   // screenshots: no mouse to open it at
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, {0.5f, 0.5f});
+    if (ImGui::BeginPopup("##vizmenu")) {
+        drawVizMenu();
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
+
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
 }
 
+// ─── Games ────────────────────────────────────────────────────────────────────
+void UIManager::drawGame(float x, float y, float w, float h, double time) {
+    ImGui::SetNextWindowPos({x, y});
+    ImGui::SetNextWindowSize({w, h});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, {0.01f, 0.01f, 0.03f, 1.f});
+    ImGui::Begin("##game", nullptr,
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // The backdrop: the playing video (fitted, lightly dimmed so it stays watchable)
+    // or the visualizer (a built-in one: MilkDrop renders elsewhere), dimmed
+    const bool have_video = video_.isReady() && player_.hasVideo();
+    if (have_video && game_bg_ != 1) {
+        const float ar = (float)video_.getWidth() / std::max(1.f, (float)video_.getHeight());
+        float dw = w, dh = h;
+        if (dw / ar > dh) dw = dh * ar;
+        else              dh = dw / ar;
+        const ImVec2 v0 = {x + (w - dw) * 0.5f, y + (h - dh) * 0.5f};
+        dl->AddImage(video_.getTextureID(), v0, {v0.x + dw, v0.y + dh});
+        dl->AddRectFilled({x, y}, {x + w, y + h}, IM_COL32(4, 4, 10, (int)(game_video_dim_ * 255.f)));
+    } else {
+        const Visualizer::Mode mode = viz_.getMode();
+        if (mode == Visualizer::Mode::MilkDrop) viz_.setMode(Visualizer::Mode::NeonWave);
+        viz_.render(dl, {x, y}, {w, h}, displayed_bpm_, time);
+        viz_.setMode(mode);
+        dl->AddRectFilled({x, y}, {x + w, y + h}, IM_COL32(4, 4, 10, 205));
+    }
+
+    arcade_.frame(dl, {x, y}, {x + w, y + h}, viz_.energy(), viz_.bass(),
+                  viz_.bars(), Visualizer::barCount(), time);
+
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+}
+
+void UIManager::drawGamesMenu() {
+    if (ImGui::IsWindowAppearing()) arcade_.scan();   // pick up new .pag files
+    const auto& games = arcade_.games();
+    for (int i = 0; i < (int)games.size(); ++i) {
+        if (i == 3) ImGui::SeparatorText("More games");   // after the built-ins
+        const GameDef& g = games[i];
+        Fonts::noteText(g.name);
+        if (ImGui::MenuItem(g.name.c_str(), nullptr, arcade_.current() == i)) arcade_.start(i);
+        if (ImGui::IsItemHovered() && !g.path.empty())
+            ImGui::SetTooltip("%s game%s%s\n%s", g.engine.c_str(), g.author.empty() ? "" : " by ",
+                              g.author.c_str(), g.path.c_str());
+    }
+    for (auto& e : arcade_.errors()) ImGui::TextDisabled("Can't load %s", e.c_str());
+    ImGui::SeparatorText("Backdrop");
+    if (ImGui::MenuItem("Auto", nullptr, game_bg_ == 0)) game_bg_ = 0;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The video when one is playing, otherwise the visualizer");
+    if (ImGui::MenuItem("Visualizer", nullptr, game_bg_ == 1)) game_bg_ = 1;
+    if (ImGui::MenuItem("Video", nullptr, game_bg_ == 2)) game_bg_ = 2;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play a movie behind the game (the visualizer when there's no video)");
+    if (game_bg_ != 1) {
+        float pct = game_video_dim_ * 100.f;
+        ImGui::SetNextItemWidth(S(140.f));
+        if (ImGui::SliderFloat("Video dim", &pct, 0.f, 95.f, "%.0f%%")) game_video_dim_ = pct / 100.f;
+    }
+    ImGui::Separator();
+    if (arcade_.active() && ImGui::MenuItem("Quit game", "Esc")) arcade_.stop();
+    if (ImGui::MenuItem("Open games folder")) {
+        std::error_code ec;
+        const fs::path dir = fs::path(appDataDir()) / "games";
+        fs::create_directories(dir, ec);
+        std::string url = "file:///" + dir.u8string();
+        std::replace(url.begin(), url.end(), '\\', '/');
+        SDL_OpenURL(url.c_str());
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Put .pag game files here (see games/README.md next to PulseAmp.exe)");
+}
+
+// ─── Visualizer menu (right-click on the visualizer, or a skin) ─────────────
+void UIManager::setMilkDropAuto(bool on) {
+    md_locked_ = !on;
+    milkdrop_.setLocked(md_locked_);
+    saveSettings();
+}
+
+void UIManager::drawVizMenu() {
+    ImGui::SeparatorText("Visualizer");
+    for (int i = 0; i < vizModeCount(); ++i)
+        if (ImGui::MenuItem(VIZ_NAMES[i], nullptr, (int)viz_.getMode() == i)) {
+            viz_.setMode((Visualizer::Mode)i);
+            saveSettings();
+        }
+    if (!MilkDrop::compiledIn()) return;
+
+    ImGui::SeparatorText("MilkDrop");
+    auto useMilkDrop = [&] {
+        if (viz_.getMode() != Visualizer::Mode::MilkDrop) { viz_.setMode(Visualizer::Mode::MilkDrop); saveSettings(); }
+    };
+    if (ImGui::MenuItem("Next preset", "]"))     { useMilkDrop(); milkdrop_.next(); }
+    if (ImGui::MenuItem("Previous preset", "[")) { useMilkDrop(); milkdrop_.previous(); }
+    if (ImGui::MenuItem("Random preset"))        { useMilkDrop(); milkdrop_.random(); }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Change presets automatically", nullptr, !md_locked_)) setMilkDropAuto(md_locked_);
+    if (!md_locked_) {
+        if (ImGui::MenuItem("Shuffle", nullptr, md_shuffle_)) {
+            md_shuffle_ = !md_shuffle_;
+            milkdrop_.setShuffle(md_shuffle_);
+            saveSettings();
+        }
+        ImGui::SetNextItemWidth(S(200.f));
+        if (ImGui::SliderFloat("##mddur_menu", &md_duration_, 5.f, 120.f, "Every %.0f s"))
+            milkdrop_.setDuration(md_duration_);
+        if (ImGui::IsItemDeactivatedAfterEdit()) saveSettings();
+    }
+
+    // Installed presets: a search box and a scrolling list (there can be thousands)
+    if (ImGui::BeginMenu("Presets")) {
+        const bool md_ok = milkdrop_.init();   // loads the preset list on first use
+        const auto& ps = milkdrop_.presets();
+        if (!md_ok || ps.empty()) {
+            ImGui::TextDisabled("No presets installed");
+            if (!milkdrop_.presetDirs().empty()) ImGui::TextDisabled("Put .milk files in %s", milkdrop_.presetDirs()[0].c_str());
+            ImGui::EndMenu();
+            return;
+        }
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        ImGui::SetNextItemWidth(S(340.f));
+        ImGui::InputTextWithHint("##mdfilter", "Search presets...", md_filter_, sizeof(md_filter_));
+
+        // Matching presets, recomputed only when the search or the preset list changes
+        static std::string       last_filter = "\x01";
+        static size_t            last_count  = 0;
+        static std::vector<int>  rows;
+        if (last_filter != md_filter_ || last_count != ps.size()) {
+            last_filter = md_filter_;
+            last_count  = ps.size();
+            rows.clear();
+            for (int i = 0; i < (int)ps.size(); ++i)
+                if (containsNoCase(ps[i].name, md_filter_) || containsNoCase(ps[i].category, md_filter_))
+                    rows.push_back(i);
+        }
+        ImGui::TextDisabled("%d of %d presets", (int)rows.size(), (int)ps.size());
+
+        const int cur = viz_.getMode() == Visualizer::Mode::MilkDrop ? milkdrop_.position() : -1;
+        ImGui::BeginChild("##mdlist", {S(340.f), S(380.f)}, true);
+        ImGuiListClipper clip;
+        clip.Begin((int)rows.size());
+        while (clip.Step())
+            for (int r = clip.DisplayStart; r < clip.DisplayEnd; ++r) {
+                const MilkDrop::Preset& p = ps[rows[r]];
+                ImGui::PushID(rows[r]);
+                if (ImGui::Selectable(p.name.c_str(), rows[r] == cur)) { useMilkDrop(); milkdrop_.select(rows[r]); }
+                if (!p.category.empty()) {   // category, right-aligned and dimmed
+                    const ImVec2 mx = ImGui::GetItemRectMax(), mn = ImGui::GetItemRectMin();
+                    const float tw = ImGui::CalcTextSize(p.category.c_str()).x;
+                    ImGui::GetWindowDrawList()->AddText({mx.x - tw - S(4.f), mn.y},
+                        ImGui::GetColorU32(ImGuiCol_TextDisabled), p.category.c_str());
+                }
+                ImGui::PopID();
+            }
+        ImGui::EndChild();
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem("Open presets folder")) {
+        std::string url = "file:///" + (fs::path(appDataDir()) / "presets").u8string();
+        std::replace(url.begin(), url.end(), '\\', '/');
+        SDL_OpenURL(url.c_str());
+    }
+    if (ImGui::MenuItem("Rescan presets")) milkdrop_.rescanPresets();
+}
+
 // ─── Waveform seek bar (unique feature) ───────────────────────────────────────
 void UIManager::drawWaveformSeekBar(float x, float y, float w, float h) {
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImDrawList* dl = ImGui::GetWindowDrawList();   // the transport bar's layer, so menus cover it
     ImU32 bg  = ImGui::GetColorU32(ImGuiCol_FrameBg);
     ImU32 acc = themes_.accentColor();
     ImU32 acc_dim = IM_COL32(
@@ -535,9 +814,7 @@ void UIManager::drawTransportBar(float x, float y, float w, float h) {
         auto* pr = playlist_.prev(); if(pr) playEntry(playlist_.getIndex());
     }
     ImGui::SameLine(0,S(4.f));
-    if (ImGui::Button(playing ? "||##pause" : "> ##play", {btn_w+S(10.f),btn_h})) {
-        if (playing) player_.pause(); else player_.play();
-    }
+    if (ImGui::Button(playing ? "||##pause" : "> ##play", {btn_w+S(10.f),btn_h})) togglePlay();
     ImGui::SameLine(0,S(4.f));
     if (ImGui::Button("[]##stop",{btn_w,btn_h})) player_.stop();
     ImGui::SameLine(0,S(4.f));
@@ -566,12 +843,16 @@ void UIManager::drawTransportBar(float x, float y, float w, float h) {
     // Volume
     ImGui::SameLine();
     ImGui::SetNextItemWidth(S(90.f));
+    // (the value is shown next to it: at 100% the thumb sits mid-track, over any label)
     float vol_pct = volume_ * 100.f;
-    if (ImGui::SliderFloat("##vol", &vol_pct, 0.f, 100.f, "Vol %.0f%%", ImGuiSliderFlags_None)) {
-        volume_ = std::clamp(vol_pct / 100.f, 0.f, 1.f);
-        player_.setVolume(volume_);
-    }
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) volume_ = 1.f, player_.setVolume(1.f);
+    if (ImGui::SliderFloat("##vol", &vol_pct, 0.f, Player::MAX_VOLUME * 100.f, "", ImGuiSliderFlags_None))
+        setVolume(vol_pct / 100.f);
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.f)
+        setVolume(volume_ + ImGui::GetIO().MouseWheel * 0.05f);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Volume: wheel or drag, up to 200%%. Right-click: 100%%");
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) setVolume(1.f);
+    ImGui::SameLine(0, S(6.f));
+    ImGui::Text("%.0f%%", volume_ * 100.f);
 
     // File name
     const PlaylistEntry* pe = playlist_.current();
@@ -793,7 +1074,8 @@ void UIManager::drawSettingsTab() {
     ImGui::Checkbox("Smart Resume",     &smart_resume_);
     ImGui::SameLine(); ImGui::TextDisabled("(?)");
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Remembers playback position for every file");
+        ImGui::SetTooltip("On: files continue where you left off (with a \"Start over\" button for a few seconds)\n"
+                          "Off: files always play from the beginning");
     ImGui::Checkbox("Auto-advance",     &auto_advance_);
     ImGui::Spacing();
 
@@ -807,8 +1089,9 @@ void UIManager::drawSettingsTab() {
     ImGui::TextDisabled("Viz Height:");
     ImGui::SetNextItemWidth(-1);
     float vizh_pct = viz_height_pct_ * 100.f;
-    if (ImGui::SliderFloat("##vizh", &vizh_pct, 10.f, 50.f, "%.0f%%"))
+    if (ImGui::SliderFloat("##vizh", &vizh_pct, 10.f, 90.f, "%.0f%%"))
         viz_height_pct_ = vizh_pct / 100.f;
+    if (ImGui::IsItemDeactivatedAfterEdit()) saveSettings();
 
     // Accent colour picker
     ImGui::TextDisabled("Accent Color:");
@@ -830,12 +1113,21 @@ void UIManager::drawSettingsTab() {
             if (ImGui::Button("Start MilkDrop", {-1, 0}))
                 viz_.setMode(Visualizer::Mode::MilkDrop);
         } else {
-            ImGui::TextDisabled("%d presets", milkdrop_.presetCount());
-            if (ImGui::Checkbox("Shuffle presets", &md_shuffle_)) milkdrop_.setShuffle(md_shuffle_);
-            if (ImGui::Checkbox("Lock current preset", &md_locked_)) milkdrop_.setLocked(md_locked_);
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::SliderFloat("##mddur", &md_duration_, 5.f, 120.f, "Change every %.0f s"))
-                milkdrop_.setDuration(md_duration_);
+            ImGui::TextDisabled("%d presets  (right-click the visualizer to pick one)", milkdrop_.presetCount());
+            ImGui::TextUnformatted("Change presets:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Auto", !md_locked_))  setMilkDropAuto(true);
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Manual", md_locked_)) setMilkDropAuto(false);
+            if (!md_locked_) {
+                if (ImGui::Checkbox("Shuffle presets", &md_shuffle_)) { milkdrop_.setShuffle(md_shuffle_); saveSettings(); }
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::SliderFloat("##mddur", &md_duration_, 5.f, 120.f, "Change every %.0f s"))
+                    milkdrop_.setDuration(md_duration_);
+                if (ImGui::IsItemDeactivatedAfterEdit()) saveSettings();
+            } else {
+                ImGui::TextDisabled("Next / previous: ] and [");
+            }
             if (ImGui::Button("Rescan presets", {-1, 0})) milkdrop_.rescanPresets();
             for (auto& d : milkdrop_.presetDirs()) {
                 Fonts::noteText(d);
@@ -846,6 +1138,8 @@ void UIManager::drawSettingsTab() {
     }
 
     ImGui::Spacing();
+    drawEqualizerSettings();
+
     ImGui::SeparatorText("Spatial Audio");
     bool spa = spatial_.isEnabled();
     if (ImGui::Checkbox("Stereo Widener (headphones)", &spa)) spatial_.setEnabled(spa);
@@ -891,9 +1185,9 @@ void UIManager::openThemeEditor() {
 // Live theme editor: every change is previewed immediately
 void UIManager::drawThemeEditor() {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, {0.5f, 0.5f});
+    ImGui::SetNextWindowSize({0, 0}, ImGuiCond_Appearing);   // fit the contents when opened, then resizable
     bool open = true;
-    if (!ImGui::Begin("Theme Editor", &open,
-                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+    if (!ImGui::Begin("Theme Editor", &open, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         return;
     }
@@ -976,8 +1270,23 @@ void UIManager::devShow(const std::string& what_list) {
         if (what == "settings")   { show_sidebar_ = true; sidebar_tab_ = 3; }
         if (what == "online")     { show_sidebar_ = true; sidebar_tab_ = 1; }
         if (what == "milkdrop")   viz_.setMode(Visualizer::Mode::MilkDrop);
+        if (what == "vizmenu")    { dev_viz_menu_ = 5; dev_viz_menu_center_ = true; }   // after the first frames' focus changes
+        if (what.rfind("game:", 0) == 0) { arcade_.scan(); arcade_.start(std::atoi(what.c_str() + 5)); }
+        if (what.rfind("preset:", 0) == 0 && milkdrop_.init()) {   // first preset whose name contains it
+            const auto& ps = milkdrop_.presets();
+            for (int i = 0; i < (int)ps.size(); ++i)
+                if (containsNoCase(ps[i].name, what.substr(7))) { milkdrop_.select(i); break; }
+        }
         if (what == "fullscreen") { fullscreen_ = true; last_activity_ = -10.0; }
-        if (what.rfind("skin:", 0) == 0) { loadSkin(what.substr(5)); if (!skin_mode_) toggleSkinMode(); }
+        if (what.rfind("skin:", 0) == 0) {   // skin:<path>[@zoom]
+            std::string path = what.substr(5);
+            const size_t at = path.rfind('@');
+            const float zoom = at != std::string::npos ? (float)std::atof(path.c_str() + at + 1) : 0.f;
+            if (at != std::string::npos) path.resize(at);
+            loadSkin(path);
+            if (zoom > 0.f) skin_zoom_ = zoom;
+            if (!skin_mode_) toggleSkinMode();
+        }
         if (what.rfind("search:", 0) == 0 || what.rfind("scsearch:", 0) == 0) {
             bool sc = what[0] == 's' && what[1] == 'c';
             std::snprintf(online_query_, sizeof(online_query_), "%s", what.substr(what.find(':') + 1).c_str());
@@ -1052,7 +1361,7 @@ void UIManager::playEntry(int idx) {
     if (!playlist_.entries().empty()) {
         const auto& cur_path = player_.getFilePath();
         if (!cur_path.empty())
-            playlist_.savePosition(cur_path, player_.getCurrentTime());
+            playlist_.savePosition(cur_path, player_.resumePosition());
     }
 
     player_.close();
@@ -1102,10 +1411,15 @@ void UIManager::onOpened(const PlaylistEntry* pe) {
     if (player_.hasVideo())
         video_.init(player_.getVideoWidth(), player_.getVideoHeight());
 
-    // Smart resume
+    // Smart resume, with a moment to start over instead
+    resumed_at_ = 0.0;
     if (smart_resume_) {
         auto pos = playlist_.getSavedPosition(pe->path);
-        if (pos) player_.seek(*pos);
+        if (pos) {
+            player_.seek(*pos);
+            resumed_at_   = *pos;
+            resume_shown_ = ImGui::GetTime();
+        }
     }
 
     // Kick off waveform generation (local files only)
@@ -1201,6 +1515,49 @@ void UIManager::openFolder() {
 #endif
 }
 
+bool UIManager::containsNoCase(const std::string& hay, const std::string& needle) {
+    if (needle.empty()) return true;
+    auto it = std::search(hay.begin(), hay.end(), needle.begin(), needle.end(),
+        [](char a, char b) { return std::tolower((unsigned char)a) == std::tolower((unsigned char)b); });
+    return it != hay.end();
+}
+
+float UIManager::splitter(const char* id, float x, float y, float w, float h, bool vertical) {
+    ImGui::SetNextWindowPos({x, y});
+    ImGui::SetNextWindowSize({w, h});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, {1, 1});
+    ImGui::Begin(id, nullptr,
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::InvisibleButton("##bar", {w, h});
+    const bool active = ImGui::IsItemActive();
+    float d = 0.f;
+    if (active || ImGui::IsItemHovered()) {
+        ImGui::SetMouseCursor(vertical ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+        ImGui::GetWindowDrawList()->AddRectFilled({x, y}, {x + w, y + h},
+            ImGui::GetColorU32(active ? ImGuiCol_SeparatorActive : ImGuiCol_SeparatorHovered));
+    }
+    if (active) d = vertical ? ImGui::GetIO().MouseDelta.x : ImGui::GetIO().MouseDelta.y;
+    if (ImGui::IsItemDeactivated()) saveSettings();
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+    return d;
+}
+
+void UIManager::setVolume(float v) {
+    volume_ = std::clamp(v, 0.f, Player::MAX_VOLUME);
+    player_.setVolume(volume_);
+}
+
+void UIManager::togglePlay() {
+    const PlayerState s = player_.getState();
+    if (s == PlayerState::Playing)     player_.pause();
+    else if (s == PlayerState::Paused) player_.play();
+    else if (s == PlayerState::Stopped && playlist_.size() > 0)
+        playEntry(std::max(0, playlist_.getIndex()));
+}
+
 std::string UIManager::formatTime(double s) const {
     if (s < 0) s = 0;
     int h = (int)(s / 3600);
@@ -1219,6 +1576,11 @@ void UIManager::playOnline(const std::string& url, const std::string& title, dou
 }
 
 void UIManager::pollBackgroundWork() {
+    media_.update();
+    {
+        std::lock_guard lk(library_mu_);
+        if (library_pending_ready_) { library_ = std::move(library_pending_); library_pending_ready_ = false; }
+    }
     std::vector<OnlineResult> res;
     std::string err, msg;
     if (online_.pollSearch(res, err)) {

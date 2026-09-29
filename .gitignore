@@ -8,3 +8,4 @@ out/
 dist/.cache/
 dist/PulseAmp/
 installer/*.exe
+bugs.txt

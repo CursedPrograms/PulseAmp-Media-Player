@@ -25,10 +25,17 @@ void Playlist::addFile(const std::string& path, const std::string& title, double
     order_.push_back((int)order_.size());
 }
 
-void Playlist::setInfo(int idx, const std::string& title, double dur) {
+void Playlist::setInfo(int idx, const std::string& title, double dur, const std::string& artist) {
     if (idx < 0 || idx >= (int)entries_.size()) return;
     if (!title.empty()) entries_[idx].title = title;
     if (dur > 0) entries_[idx].duration = dur;
+    if (!artist.empty()) entries_[idx].artist = artist;
+}
+
+void Playlist::addEntry(const PlaylistEntry& e) {
+    entries_.push_back(e);
+    if (entries_.back().title.empty()) entries_.back().title = fs::path(e.path).stem().string();
+    order_.push_back((int)order_.size());
 }
 
 void Playlist::removeAt(int idx) {

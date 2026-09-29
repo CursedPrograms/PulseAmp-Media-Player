@@ -26,6 +26,8 @@
 #include "ui_manager.h"
 #include "screenshot.h"
 #include "fonts.h"
+#include "single_instance.h"
+#include "logos.h"
 #include <string>
 #include <vector>
 #include <cstdio>
@@ -48,15 +50,20 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> files;
     std::string shot_path, shot_show;
     int shot_w = WIN_W, shot_h = WIN_H, shot_frames = 30;
+    bool new_window = false;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
-        if      (a == "--screenshot" && i + 1 < argc) shot_path = argv[++i];
+        if      (a == "--new-window") new_window = true;
+        else if (a == "--screenshot" && i + 1 < argc) shot_path = argv[++i];
         else if (a == "--size"       && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &shot_w, &shot_h);
         else if (a == "--frames"     && i + 1 < argc) shot_frames = std::max(1, std::atoi(argv[++i]));
         else if (a == "--show"       && i + 1 < argc) shot_show = argv[++i];
         else files.push_back(a);
     }
     const bool shot = !shot_path.empty();
+
+    // Already running (e.g. a file double-clicked in Explorer): play it there instead
+    if (!shot && !new_window && SingleInstance::forwardToRunning(files)) return 0;
 
     // ── SDL init ──────────────────────────────────────────────────────────────
     // Real pixels on high-DPI Windows displays (we scale the UI ourselves)
@@ -112,6 +119,8 @@ int main(int argc, char* argv[]) {
     SDL_GL_MakeCurrent(window, gl_ctx);
     SDL_GL_SetSwapInterval(1); // vsync
     SDL_SetWindowMinimumSize(window, 480, 320);
+    if (!shot) SingleInstance::listen(window);
+    Logos::setWindowIcon(window);   // Linux / macOS (Windows uses the exe's icon)
 
     // Enable drag-and-drop
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
@@ -154,6 +163,7 @@ int main(int argc, char* argv[]) {
     viz.setColor(themes.accentColor());
 
     UIManager ui(player, audio, video, viz, themes, conv, playlist, bpm, spatial, waveform);
+    audio.setEqualizer(&ui.equalizer());
     ui.setScale(ui_scale);
 
     // ── Command-line files ────────────────────────────────────────────────────
@@ -177,8 +187,9 @@ int main(int argc, char* argv[]) {
         glRenderbufferStorage_(GL_RENDERBUFFER, GL_RGBA8, shot_w, shot_h);
         glBindFramebuffer_(GL_FRAMEBUFFER, shot_fbo);
         glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, shot_rbo);
-        ui.devShow(shot_show);
     }
+    // --show also works in a normal window, e.g. "--show game:2" starts Invaders
+    if (!shot_show.empty()) ui.devShow(shot_show);
     int frame_no = 0;
 
     // ── Main loop ─────────────────────────────────────────────────────────────
@@ -193,6 +204,14 @@ int main(int argc, char* argv[]) {
             if (!ui.handleEvent(e)) running = false;
         }
         if (ui.wantsQuit()) running = false;
+
+        // Files opened in a second launch: add them and play the first one
+        std::vector<std::string> received = SingleInstance::takeReceived();
+        if (!received.empty()) {
+            const int first_new = playlist.size();
+            for (auto& f : received) ui.addToPlaylist(f);
+            if (playlist.size() > first_new) ui.playEntry(first_new);
+        }
 
         // Compute elapsed time
         Uint64 now  = SDL_GetPerformanceCounter();
@@ -252,13 +271,15 @@ int main(int argc, char* argv[]) {
     // ── Cleanup ───────────────────────────────────────────────────────────────
     // Save resume position before exit
     if (!player.getFilePath().empty())
-        playlist.savePosition(player.getFilePath(), player.getCurrentTime());
+        playlist.savePosition(player.getFilePath(), player.resumePosition());
 
     player.close();
     audio.close();
     waveform.cancel();
     conv.cancel();
 
+    ui.releaseGL();   // skin / MilkDrop / cover-art textures, while the GL context exists
+    video.destroy();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

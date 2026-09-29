@@ -30,7 +30,7 @@ struct VizParticle {
 class Visualizer {
 public:
     // MilkDrop is drawn by the UI through projectM (see milkdrop.h), not here
-    enum class Mode { SpectrumBars, Oscilloscope, RadialSpectrum, BPMPulse, ParticleStorm, MilkDrop };
+    enum class Mode { SpectrumBars, Oscilloscope, RadialSpectrum, BPMPulse, ParticleStorm, NeonWave, MilkDrop };
 
     Visualizer();
 
@@ -54,6 +54,8 @@ public:
     const float* bars()     const { return bars_.data(); }
     const float* barPeaks() const { return bars_peak_.data(); }
     const float* wave()     const { return wave_buf_.data(); }   // mono, -1..1
+    float energy() const { return energy_; }   // overall loudness 0..1
+    float bass()   const { return bass_; }     // low end 0..1
     static constexpr int barCount()  { return VIZ_BARS; }
     static constexpr int waveCount() { return VIZ_FFT_SIZE; }
 
@@ -69,6 +71,7 @@ private:
     void drawRadialSpectrum (ImDrawList* dl, ImVec2 o, ImVec2 sz, double t);
     void drawBPMPulse       (ImDrawList* dl, ImVec2 o, ImVec2 sz, float bpm, double t);
     void drawParticleStorm  (ImDrawList* dl, ImVec2 o, ImVec2 sz, double t);
+    void drawNeonWave       (ImDrawList* dl, ImVec2 o, ImVec2 sz, double t);
 
     // ── State ──────────────────────────────────────────────────────────────────
     Mode   mode_  = Mode::SpectrumBars;

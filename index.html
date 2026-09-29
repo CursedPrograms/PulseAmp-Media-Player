@@ -9,7 +9,7 @@
 <meta property="og:description" content="YouTube & SoundCloud, MilkDrop visualizations, Winamp skins, themes. Free for Windows and Linux.">
 <meta property="og:image" content="https://cursedprograms.github.io/PulseAmp-Media-Player/assets/promo/banner.jpg">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230e0e16'/%3E%3Cpath d='M8 34h10l5-14 8 28 7-22 5 8h13' fill='none' stroke='%2300ff8c' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="assets/logo/logo02.png">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
 <header>
   <div class="wrap nav">
     <a class="brand" href="#">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#161624"/><path d="M8 34h10l5-14 8 28 7-22 5 8h13" fill="none" stroke="#00ff8c" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <img src="assets/logo/logo02.png" alt="" width="30" height="30">
       PulseAmp
     </a>
     <nav>
@@ -85,12 +85,17 @@
         <div class="feature">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>
           <h3>MilkDrop visualizations</h3>
-          <p>Winamp's legendary visualizer through projectM, with nearly 10,000 presets. Switch presets with <kbd>[</kbd> and <kbd>]</kbd>.</p>
+          <p>Winamp's legendary visualizer through projectM, with nearly 10,000 presets. Switch presets with <kbd>[</kbd> and <kbd>]</kbd>, or right-click to choose from the list.</p>
         </div>
         <div class="feature">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7c0-2 2-3 4-3h8c2 0 4 1 4 3v10c0 2-2 3-4 3H8c-2 0-4-1-4-3z"/><path d="M8 9h8M8 13h5"/></svg>
           <h3>Winamp skins</h3>
           <p>Classic mode turns PulseAmp into a compact window in the shape of its skin. Load real Winamp <code>.wsz</code> skins, or design your own.</p>
+        </div>
+        <div class="feature">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="11" rx="4"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r="1" fill="currentColor"/><circle cx="17.5" cy="13.5" r="1" fill="currentColor"/></svg>
+          <h3>Neon arcade</h3>
+          <p>Snake, Runner and Invaders in glowing neon, played to your music over the visualizer, or over a playing video so you can watch a movie while you play. Make your own levels with <code>.pag</code> game files.</p>
         </div>
         <div class="feature">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><circle cx="12" cy="16" r="3"/></svg>
@@ -100,7 +105,7 @@
         <div class="feature">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h3l3-7 4 14 3-9 2 2h3"/></svg>
           <h3>Waveform, BPM &amp; resume</h3>
-          <p>Seek on the track's waveform, see the live BPM, and pick up every file where you left off.</p>
+          <p>Seek on the track's waveform, see the live BPM, and pick up every file where you left off, or hit <em>Start over</em> to begin again.</p>
         </div>
         <div class="feature">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -114,7 +119,11 @@
   <section id="skins">
     <div class="wrap">
       <h2>Skins, in any shape</h2>
-      <p class="sub">Press <kbd>Ctrl</kbd>+<kbd>M</kbd> for Classic mode. PulseAmp ships with two skins of its own and plays classic Winamp skins too: thousands are free at <a href="https://skins.webamp.org/">skins.webamp.org</a>.</p>
+      <p class="sub">Press <kbd>Ctrl</kbd>+<kbd>M</kbd> for Classic mode. PulseAmp ships with three skins of its own and plays classic Winamp skins too: thousands are free at <a href="https://skins.webamp.org/">skins.webamp.org</a>.</p>
+      <figure class="skin-wide">
+        <div class="shot"><img src="assets/screenshots/midnightneon.jpg" width="1536" height="1024" alt="The MidnightNeon skin: playlist with cover art, now playing card, neon visualizer and equalizer" loading="lazy"></div>
+        <figcaption>MidnightNeon &middot; a full player: playlist and library with cover art, favorites, visualizer and equalizer</figcaption>
+      </figure>
       <div class="skins">
         <figure>
           <div class="round-shot"><img src="assets/screenshots/orb.png" width="720" height="720" alt="The round PulseOrb skin"></div>
@@ -140,6 +149,14 @@
           <div class="shot"><img src="assets/screenshots/themes.png" width="1280" height="780" alt="The Vaporwave theme and the theme editor" loading="lazy"></div>
           <figcaption>The Vaporwave theme and the theme editor</figcaption>
         </figure>
+        <figure>
+          <div class="shot"><img src="assets/screenshots/vizmenu.png" width="1280" height="780" alt="The visualizer menu: modes, MilkDrop presets, automatic or manual preset changes" loading="lazy"></div>
+          <figcaption>Right-click the visualizer to pick a mode or a MilkDrop preset</figcaption>
+        </figure>
+        <figure>
+          <div class="shot"><img src="assets/screenshots/games.png" width="1280" height="780" alt="Invaders from the Games menu, played over the visualizer" loading="lazy"></div>
+          <figcaption>The neon arcade: Snake, Runner and Invaders, played to your music</figcaption>
+        </figure>
       </div>
     </div>
   </section>
@@ -158,7 +175,11 @@
         </div>
         <div class="step">
           <h3>Make it yours</h3>
-          <p>Try MilkDrop from the visualizer button, <kbd>Ctrl</kbd>+<kbd>M</kbd> for skins, and View &rarr; Theme for colours.</p>
+          <p>Right-click the visualizer to pick a visualizer or MilkDrop preset, <kbd>Ctrl</kbd>+<kbd>M</kbd> for skins, and View &rarr; Theme for colours.</p>
+        </div>
+        <div class="step">
+          <h3>Add presets &amp; skins</h3>
+          <p>Put MilkDrop <code>.milk</code> presets in <code>%APPDATA%\PulseAmp\presets</code> and Winamp <code>.wsz</code> skins (from <a href="https://skins.webamp.org/">skins.webamp.org</a>) in <code>%APPDATA%\PulseAmp\skins</code>, or <code>~/.pulseamp</code> on Linux. The visualizer's right-click menu and View &rarr; Skins open these folders for you.</p>
         </div>
       </div>
       <p class="note">PulseAmp isn't code-signed yet, so Windows may show "Windows protected your PC" the first time: choose <b>More info &rarr; Run anyway</b>. If YouTube or SoundCloud stop working, click <b>Update yt-dlp</b> in the Online tab.</p>

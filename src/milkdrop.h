@@ -24,6 +24,7 @@ public:
 
     // Needs the GL context current. Safe to call repeatedly (initialises once).
     bool init();
+    void shutdown();   // free projectM + GL objects (GL context must be current)
     bool ok() const { return handle_ != nullptr; }
     const std::string& error() const { return error_; }
 
@@ -42,13 +43,23 @@ public:
     void next();
     void previous();
     void random();
+    // Playback settings: kept until init() if set before it
     void setShuffle(bool on);
-    void setLocked(bool on);
-    void setDuration(double seconds);
+    void setLocked(bool on);               // manual: stay on the current preset
+    void setDuration(double seconds);      // auto: change preset every N seconds
     void rescanPresets();
     const std::vector<std::string>& presetDirs() const { return dirs_; }
 
+    // Installed presets, sorted by folder (category) then name
+    struct Preset { std::string name, category; };
+    const std::vector<Preset>& presets() const { return presets_; }
+    int  position() const;                 // index of the current preset, -1 if none
+    void select(int index);
+
 private:
+    bool   shuffle_ = true, locked_ = false;
+    double duration_ = 30.0;
+    std::vector<Preset> presets_;
     void* handle_   = nullptr;   // projectm_handle
     void* playlist_ = nullptr;   // projectm_playlist_handle
     bool  tried_    = false;

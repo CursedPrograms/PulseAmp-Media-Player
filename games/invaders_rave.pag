@@ -1,0 +1,25 @@
+{
+  // Invaders with hand-made formations. S = squid, C = crab, B = boss, . = gap.
+  // The waves repeat after the last one, a little lower and faster each time.
+  "name": "Invaders: Rave",
+  "engine": "invaders",
+  "author": "PulseAmp",
+  "colors": { "primary": "#01dcff", "secondary": "#ffe14d", "accent": "#ff3cc8" },
+  "speed": 1.1,
+  "lives": 3,
+  "waves": [
+    [ "..B....B..",
+      "SSSSSSSSSS",
+      "CCCCCCCCCC",
+      "CC.CCCC.CC" ],
+    [ "S.S.S.S.S.S",
+      ".C.C.C.C.C.",
+      "C.C.C.C.C.C",
+      ".B.......B." ],
+    [ "BBBBBBBBBB",
+      "S........S",
+      "S.CCCCCC.S",
+      "S........S",
+      "SSSSSSSSSS" ]
+  ]
+}

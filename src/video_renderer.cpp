@@ -31,7 +31,9 @@ void VideoRenderer::uploadFrame(const VideoFrame& frame) {
         init(frame.width, frame.height);
     }
     glBindTexture(GL_TEXTURE_2D, texture_id_);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, frame.stride / 4);   // rows are padded
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
         frame.width, frame.height, GL_RGBA, GL_UNSIGNED_BYTE, frame.rgba.data());
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
