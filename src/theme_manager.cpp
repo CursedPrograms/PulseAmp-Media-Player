@@ -49,6 +49,7 @@ void ThemeManager::addPresets() {
         themes_.push_back(t);
     };
     //      name              bg         panel      frame      text       dim        accent     accent2   round border
+    preset("Cursed",         "#005184", "#004067", "#007ab7", "#ffffff", "#c2c2c2", "#f088e9", "#34a9e3", 4, false); // the standard: Cursed Entertainment's colours
     preset("NeonAmp",        "#0d0d0d", "#121212", "#1a1a1a", "#00ff8c", "#4d8059", "#00ff64", "#00b43c", 3, false); // Winamp 2.x spirit
     preset("ChromePlayer",   "#26292e", "#212429", "#333842", "#e0ebff", "#737f99", "#50a0ff", "#2864c8", 4, true);  // WMP 9 spirit
     preset("MidnightFusion", "#140f1f", "#1a1424", "#241a33", "#ffe699", "#8c7333", "#ffb400", "#c87800", 5, false);

@@ -314,6 +314,7 @@ The bundled FFmpeg from vcpkg/apt/brew covers H.264, H.265/HEVC, VP8, VP9, AV1, 
 
 | Theme | Palette | Inspired by |
 |---|---|---|
+| **Cursed** (standard) | Cursed Blue + Pink | Cursed Entertainment |
 | **NeonAmp** | Black + Electric Green | Winamp 2.x |
 | **ChromePlayer** | Silver-Grey + Steel Blue | Windows Media Player 9 |
 | **MidnightFusion** | Deep Purple + Molten Gold | PulseAmp original |
