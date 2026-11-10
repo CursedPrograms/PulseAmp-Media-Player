@@ -1,6 +1,6 @@
 #pragma once
 // ─── games.h ──────────────────────────────────────────────────────────────────
-// The arcade: neon Snake, Neon Runner and Invaders for the full window (not
+// The arcade: neon Snake, Neon Runner, Invaders and Killer Stardust for the full window (not
 // skins), drawn over the dimmed visualizer and moving with the music: runner
 // obstacles arrive on the beat and invaders march to it.
 //
@@ -16,7 +16,7 @@
 
 // A playable game: a built-in, or one loaded from a .pag file
 struct GameDef {
-    std::string name, engine, author;   // engine: snake | runner | invaders
+    std::string name, engine, author;   // engine: snake | runner | invaders | stardust
     std::string path;                   // .pag file ("" = built-in)
     ImU32 c1 = 0, c2 = 0, c3 = 0;       // primary, secondary, accent colours
     float speed   = 1.f;                // overall pace

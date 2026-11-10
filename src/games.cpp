@@ -502,6 +502,164 @@ private:
     }
 };
 
+// ─── Killer Stardust ──────────────────────────────────────────────────────────
+// A Cursed Arcade game (the web version: killer-stardust.netlify.app). Steer the comet, eat the stardust to grow
+// your tail; invaders fall in waves, faster each wave, and drop in on the beat. One through your tail cuts it
+// there (everything behind is lost); one on your head, or running into your own tail, and it's over.
+class Stardust : public GameEngine {
+public:
+    using GameEngine::GameEngine;
+    const char* help() const override { return "Arrows / WASD: steer"; }
+
+    void reset() override {
+        score = 0; over = false;
+        W = 40; H = 24;
+        body_.clear();
+        for (int i = 0; i < 3; ++i) body_.push_back({W / 2 - i, H / 2});
+        dir_ = {1, 0};
+        queue_.clear();
+        length_ = 3;
+        dust_.clear();
+        for (int i = 0; i < 36; ++i) dust_.push_back(freeCell());
+        inv_.clear();
+        cuts_.clear();
+        wave_ = 1; wave_t_ = 0.f; acc_ = 0.f;
+        spawnWave();
+        stars_.clear();
+        for (int i = 0; i < 160; ++i) stars_.push_back({rnd(0.f, 1.f), rnd(0.f, 1.f), rnd(0.f, 6.28f), rnd(0.5f, 2.5f)});
+    }
+
+    void update(float dt, const GameAudio& a) override {
+        auto turn = [&](int dx, int dy) {
+            Cell last = queue_.empty() ? dir_ : queue_.back();
+            if ((last.x == -dx && last.y == -dy) || (last.x == dx && last.y == dy)) return;
+            if (queue_.size() < 3) queue_.push_back({dx, dy});
+        };
+        if (keyPressed(ImGuiKey_LeftArrow,  ImGuiKey_A)) turn(-1, 0);
+        if (keyPressed(ImGuiKey_RightArrow, ImGuiKey_D)) turn(1, 0);
+        if (keyPressed(ImGuiKey_UpArrow,    ImGuiKey_W)) turn(0, -1);
+        if (keyPressed(ImGuiKey_DownArrow,  ImGuiKey_S)) turn(0, 1);
+
+        // waves on a clock, faster each time; with the music on, an extra invader drops in on some beats
+        wave_t_ += dt;
+        const float every = std::max(2.f, 6.f - wave_ * 0.4f) / std::max(0.25f, def.speed);
+        if (wave_t_ > every) { wave_t_ = 0.f; ++wave_; spawnWave(); }
+        if (def.beat && a.beat && rnd(0.f, 1.f) < 0.5f) inv_.push_back({(float)rndi(0, W - 1), -1.f, fallSpeed() * 1.4f});
+
+        // the comet: a cell a step, a little quicker as it grows
+        const float interval = 0.11f / std::max(0.25f, def.speed) * std::max(0.5f, 1.f - length_ * 0.004f);
+        acc_ += dt;
+        while (acc_ >= interval && !over) { acc_ -= interval; step(); }
+
+        // the invaders fall; a head hit ends it, a tail hit cuts the tail there
+        for (auto& v : inv_) {
+            v.y += v.v * dt;
+            if (v.y >= H) { v.y = -1.f; v.x = (float)rndi(0, W - 1); }
+            const int vx = (int)std::lround(v.x), vy = (int)std::floor(v.y + 0.5f);
+            if (vy < 0) continue;
+            if (vx == body_.front().x && vy == body_.front().y) { over = true; return; }
+            for (size_t i = 1; i < body_.size(); ++i) {
+                if (body_[i].x == vx && body_[i].y == vy) {
+                    cuts_.push_back({body_[i].x, body_[i].y, 0.45f});
+                    body_.resize(i);
+                    length_ = std::max(3, (int)i);
+                    v.y = -1.f; v.x = (float)rndi(0, W - 1);
+                    break;
+                }
+            }
+        }
+        for (auto& c : cuts_) c.life -= dt;
+        cuts_.erase(std::remove_if(cuts_.begin(), cuts_.end(), [](const Cut& c) { return c.life <= 0.f; }), cuts_.end());
+    }
+
+    void draw(ImDrawList* dl, ImVec2 p0, ImVec2 p1, const GameAudio& a, double t) override {
+        const float cs = std::floor(std::min((p1.x - p0.x) / W, (p1.y - p0.y - 40.f) / H));
+        const ImVec2 o = {std::floor((p0.x + p1.x - cs * W) * 0.5f), std::floor(p0.y + 34.f + (p1.y - p0.y - 34.f - cs * H) * 0.5f)};
+        auto at = [&](float x, float y) { return ImVec2(o.x + x * cs, o.y + y * cs); };
+
+        // space: a dark field, stars that twinkle harder when the music's loud
+        dl->AddRectFilled(at(0, 0), at((float)W, (float)H), IM_COL32(2, 6, 17, 210), 6.f);
+        for (auto& s : stars_) {
+            const float k = 0.35f + 0.65f * std::fabs(std::sin(s.t + (float)t * s.s * (1.f + a.energy * 2.f)));
+            const ImVec2 q = at(s.x * W, s.y * H);
+            dl->AddRectFilled(q, {q.x + 1.6f, q.y + 1.6f}, withAlpha(IM_COL32(255, 255, 255, 255), k));
+        }
+        glowRect(dl, at(0, 0), at((float)W, (float)H), 6.f, def.c1, 4.f + a.bass * 8.f);
+        dl->AddRect(at(0, 0), at((float)W, (float)H), withAlpha(def.c1, 0.8f), 6.f, 0, 2.f);
+
+        // the stardust (secondary colour), pulsing with the bass
+        for (auto& d : dust_) {
+            const ImVec2 m = at(d.x + 0.5f, d.y + 0.5f);
+            const float r = cs * (0.17f + a.bass * 0.08f);
+            glowCircle(dl, m, r, def.c2, cs * 0.45f);
+            dl->AddCircleFilled(m, r, def.c2, 12);
+        }
+
+        // the comet: a white head, the tail in the primary colour, fading out
+        const int n = (int)body_.size();
+        for (int i = n - 1; i >= 0; --i) {
+            const float fade = std::max(0.15f, 1.f - (float)i / (n + 2));
+            const ImU32 col = i == 0 ? IM_COL32(255, 255, 255, 255) : withAlpha(def.c1, fade);
+            ImVec2 q0 = at((float)body_[i].x, (float)body_[i].y), q1 = at(body_[i].x + 1.f, body_[i].y + 1.f);
+            const float in = cs * 0.1f;
+            q0.x += in; q0.y += in; q1.x -= in; q1.y -= in;
+            softGlow(dl, q0, q1, cs * 0.2f, i == 0 ? def.c1 : col, cs * (i == 0 ? 0.6f : 0.35f));
+            dl->AddRectFilled(q0, q1, col, cs * 0.18f);
+        }
+
+        // the invaders (accent colour): a little ship each
+        for (auto& v : inv_) {
+            if (v.y < -0.9f) continue;
+            const ImVec2 q = at(v.x, v.y);
+            const ImVec2 b0 = {q.x + cs * 0.15f, q.y + cs * 0.25f}, b1 = {q.x + cs * 0.85f, q.y + cs * 0.7f};
+            softGlow(dl, b0, b1, 2.f, def.c3, cs * 0.35f);
+            dl->AddRectFilled(b0, b1, def.c3, 2.f);
+            dl->AddRectFilled({q.x + cs * 0.05f, q.y + cs * 0.45f}, {q.x + cs * 0.2f, q.y + cs * 0.85f}, def.c3);
+            dl->AddRectFilled({q.x + cs * 0.8f, q.y + cs * 0.45f}, {q.x + cs * 0.95f, q.y + cs * 0.85f}, def.c3);
+        }
+
+        // where the tail was just cut: a ring that opens out
+        for (auto& c : cuts_) {
+            const float k = 1.f - c.life / 0.45f;
+            dl->AddCircle(at(c.x + 0.5f, c.y + 0.5f), cs * (0.4f + k * 1.4f), withAlpha(def.c3, 1.f - k), 24, 3.f);
+        }
+
+        // the wave, top right
+        const std::string w = "WAVE " + std::to_string(wave_);
+        hudText(dl, {p1.x - hudSize(18.f, w).x - 14.f, p0.y + 8.f}, 18.f, def.c1, w);
+    }
+
+private:
+    struct Cell { int x, y; };
+    struct Inv { float x, y, v; };
+    struct Cut { int x, y; float life; };
+    struct Star { float x, y, t, s; };
+    int W = 40, H = 24, length_ = 3, wave_ = 1;
+    std::deque<Cell> body_, queue_;
+    Cell dir_{1, 0};
+    std::vector<Cell> dust_;
+    std::vector<Inv> inv_;
+    std::vector<Cut> cuts_;
+    std::vector<Star> stars_;
+    float acc_ = 0.f, wave_t_ = 0.f;
+
+    float fallSpeed() { return (2.2f + wave_ * 0.35f) * std::max(0.25f, def.speed) * rnd(0.8f, 1.25f); }
+    Cell freeCell() { return {rndi(0, W - 1), rndi(0, H - 1)}; }
+    void spawnWave() {
+        for (int i = 0; i < 3 + wave_ * 2; ++i) inv_.push_back({(float)rndi(0, W - 1), -rnd(1.f, 8.f), fallSpeed()});
+    }
+    void step() {
+        if (!queue_.empty()) { dir_ = queue_.front(); queue_.pop_front(); }
+        Cell h = {(body_.front().x + dir_.x + W) % W, (body_.front().y + dir_.y + H) % H};
+        for (size_t i = 0; i + 1 < body_.size(); ++i)          // the very end moves away this step
+            if (body_[i].x == h.x && body_[i].y == h.y) { over = true; return; }
+        body_.push_front(h);
+        for (auto& d : dust_)
+            if (d.x == h.x && d.y == h.y) { score += 10; ++length_; d = freeCell(); }
+        while ((int)body_.size() > length_) body_.pop_back();
+    }
+};
+
 // ─── Arcade ───────────────────────────────────────────────────────────────────
 Arcade::Arcade() = default;
 Arcade::~Arcade() = default;
@@ -534,8 +692,9 @@ bool loadPag(const fs::path& path, GameDef& d, std::string& err) {
     const GameDef base = d.engine == "snake"    ? builtin("", "snake", "#00ff8c", "#ff3cc8", "#01dcff")
                        : d.engine == "runner"   ? builtin("", "runner", "#01dcff", "#ff3cc8", "#ffe14d")
                        : d.engine == "invaders" ? builtin("", "invaders", "#ff3cc8", "#00ff8c", "#01dcff")
+                       : d.engine == "stardust" ? builtin("", "stardust", "#f088e9", "#34a9e3", "#39ff6a")
                        : GameDef{};
-    if (base.engine.empty()) { err = "\"engine\" must be snake, runner or invaders"; return false; }
+    if (base.engine.empty()) { err = "\"engine\" must be snake, runner, invaders or stardust"; return false; }
 
     d = base;
     d.path    = path.u8string();
@@ -567,6 +726,7 @@ void Arcade::scan() {
     defs_.push_back(builtin("Neon Snake", "snake",    "#00ff8c", "#ff3cc8", "#01dcff"));
     defs_.push_back(builtin("Neon Runner", "runner",  "#01dcff", "#ff3cc8", "#ffe14d"));
     defs_.push_back(builtin("Invaders", "invaders",   "#ff3cc8", "#00ff8c", "#01dcff"));
+    defs_.push_back(builtin("Killer Stardust", "stardust", "#f088e9", "#34a9e3", "#39ff6a"));
 
     std::error_code ec;
     for (const fs::path dir : { fs::path(exeDir()) / "games", fs::path(appDataDir()) / "games" }) {
@@ -589,6 +749,7 @@ void Arcade::start(int index) {
     const GameDef& d = defs_[index];
     if      (d.engine == "snake")  game_ = std::make_unique<Snake>(d);
     else if (d.engine == "runner") game_ = std::make_unique<Runner>(d);
+    else if (d.engine == "stardust") game_ = std::make_unique<Stardust>(d);
     else                           game_ = std::make_unique<Invaders>(d);
     game_->reset();
     current_ = index;
